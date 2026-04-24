@@ -6,53 +6,53 @@ This repository contains our group's implementation for the Simple Operating Sys
 ## Team Members
 | Name | Student ID | GitHub Username | Assigned Tasks |
 | :--- | :--- | :--- | :--- |
-| Lê Đức Nguyên Khoa | 2411603 | @username | *...* |
-| Trần Văn Thiên Kim | 2411816 | @username | *...* |
-| Trần Tấn Phát | 2412610 | @username | *...* |
-| Lê Bảo Tấn Phong | 2412635 | @username | *...* |
-| Phan Phước Thiện Quang | 2412843 | @username | *...* |
-| Lương Hoàng Vĩnh Tiến | 2413477 | @username | *...* |
+| Lê Đức Nguyên Khoa | 2411603 | @monoz2509k | Technical_Documentation & Data_Synthesis |
+| Trần Văn Thiên Kim | 2411816 | @1K-Keem | Advanced_Memory_Mapping |
+| Trần Tấn Phát | 2412610 | @tranphat246 | User_Space_Memory |
+| Lê Bảo Tấn Phong | 2412635 | @tanphong-sudo | System_Calls, Synchronization & Centralized_Logging |
+| Phan Phước Thiện Quang | 2412843 | @ducklemon596 | Kernel_Space_Memory |
+| Lương Hoàng Vĩnh Tiến | 2413477 | @Vinh-Tien-hcmut | CPU_Scheduler |
 
 ---
 ## Task Breakdown & Assignment
 
 ### 1. CPU Scheduler (MLQ Policy)
-**Assignee:** [Name]
+**Assignee:** Lương Hoàng Vĩnh Tiến
 **Files:** `queue.c`, `sched.c`
 - [ ] Implement `enqueue()` to push PCBs into the correct priority queue.
 - [ ] Implement `dequeue()` to retrieve the next 'in turn' PCB.
 - [ ] Implement `get_proc()` to fetch waiting processes according to the Multi-Level Queue slot rules and dual-priority mechanisms.
 
 ### 2. User Space Memory (Core Paging & Swapping)
-**Assignee:** [Name]
+**Assignee:** Trần Tấn Phát
 **Files:** `mm.c`, `mm-vm.c`, `mm-memphy.c`
 - [ ] Implement fundamental user-space operations (`ALLOC`, `FREE`, `READ`, `WRITE`).
 - [ ] Manage virtual memory regions (`vm_rg_struct`) and track available space via the free list (`vm_freerg_list`).
 - [ ] Implement the page swapping mechanism to move physical frames between the simulated RAM (`MEMRAM`) and SWAP (`MEMSWP`) devices.
 
 ### 3. Kernel Space Memory (Slab Allocator)
-**Assignee:** [Name]
+**Assignee:** Phan Phước Thiện Quang
 **Files:** `mm.c` (Kernel operations section)
 - [ ] Implement `kmalloc` to allocate physically contiguous memory regions in kernel space.
 - [ ] Implement `kmem_cache_create` to initialize slab cache pools for frequently requested structures.
 - [ ] Implement `kmem_cache_alloc` to allocate objects from the predefined slab cache pools to reduce memory fragmentation.
 
 ### 4. Advanced Memory Mapping (64-bit Multi-level Architecture)
-**Assignee:** [Name]
+**Assignee:** Trần Văn Thiên Kim
 **Files:** `mm64.c`, architecture headers
 - [ ] Implement the 64-bit 5-level address translation scheme (PGD, P4D, PUD, PMD, PT).
 - [ ] Enforce canonical addressing rules (bits 63-57 set to `0` for user space and `1` for kernel space).
 - [ ] Implement the `vmap_pgd_memset` system call handler to simulate dummy allocations in the large 64-bit address space.
 
 ### 5. System Calls, Synchronization & Centralized Logging
-**Assignee:** [Name]
+**Assignee:** Lê Bảo Tấn Phong
 **Files:** `syscall.c`, `sys_xxxhandler.c`, `syscall.tbl`, Core Data Structures
 - [ ] Implement locking mechanisms (mutexes/spinlocks) to protect shared data structures (queues, memory lists) from race conditions in the multi-processor simulation.
 - [ ] Create and register new system call handlers in the kernel interface, ensuring user-space test programs (`sc`) work correctly.
 - [ ] Implement a centralized logging pipeline within the OS to trace segmentation faults, memory leaks, and context switches across CPUs, making debugging easier for the whole team.
 
 ### 6. Technical Documentation & Data Synthesis
-**Assignee:** [Name]
+**Assignee:** Lê Đức Nguyên Khoa
 **Files:** Final Report (PDF)
 - [ ] Synthesize simulation outputs to draw the Gantt diagram describing CPU process execution scheduling.
 - [ ] Map and document the status of memory allocation in data segments.
