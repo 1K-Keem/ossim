@@ -14,55 +14,52 @@ This repository contains our group's implementation for the Simple Operating Sys
 | Lương Hoàng Vĩnh Tiến | 2413477 | @username | *...* |
 
 ---
-
 ## Task Breakdown & Assignment
 
 ### 1. CPU Scheduler (MLQ Policy)
 **Assignee:** [Name]
 **Files:** `queue.c`, `sched.c`
-- [ ] Implement `enqueue()` in `queue.c` to push PCBs into the correct priority queue.
-- [ ] Implement `dequeue()` in `queue.c` to retrieve the next 'in turn' PCB.
-- [ ] Implement `get_proc()` in `sched.c` to fetch waiting processes according to the MLQ slot rules.
+- [ ] Implement `enqueue()` to push PCBs into the correct priority queue.
+- [ ] Implement `dequeue()` to retrieve the next 'in turn' PCB.
+- [ ] Implement `get_proc()` to fetch waiting processes according to the Multi-Level Queue slot rules and dual-priority mechanisms.
 
-### 2. Memory Management (Core Paging & Swapping)
+### 2. User Space Memory (Core Paging & Swapping)
 **Assignee:** [Name]
 **Files:** `mm.c`, `mm-vm.c`, `mm-memphy.c`
-- [ ] Implement fundamental memory operations (`ALLOC`, `FREE`, `READ`, `WRITE`).
-- [ ] Manage memory regions (`vm_rg_struct`) and track available space via the free list (`vm_freerg_list`).
+- [ ] Implement fundamental user-space operations (`ALLOC`, `FREE`, `READ`, `WRITE`).
+- [ ] Manage virtual memory regions (`vm_rg_struct`) and track available space via the free list (`vm_freerg_list`).
 - [ ] Implement the page swapping mechanism to move physical frames between the simulated RAM (`MEMRAM`) and SWAP (`MEMSWP`) devices.
 
-### 3. Memory Management (64-bit Multi-level Architecture)
+### 3. Kernel Space Memory (Slab Allocator)
+**Assignee:** [Name]
+**Files:** `mm.c` (Kernel operations section)
+- [ ] Implement `kmalloc` to allocate physically contiguous memory regions in kernel space.
+- [ ] Implement `kmem_cache_create` to initialize slab cache pools for frequently requested structures.
+- [ ] Implement `kmem_cache_alloc` to allocate objects from the predefined slab cache pools to reduce memory fragmentation.
+
+### 4. Advanced Memory Mapping (64-bit Multi-level Architecture)
 **Assignee:** [Name]
 **Files:** `mm64.c`, architecture headers
 - [ ] Implement the 64-bit 5-level address translation scheme (PGD, P4D, PUD, PMD, PT).
 - [ ] Enforce canonical addressing rules (bits 63-57 set to `0` for user space and `1` for kernel space).
-- [ ] Enforce strict separation between User Space and Kernel Space.
 - [ ] Implement the `vmap_pgd_memset` system call handler to simulate dummy allocations in the large 64-bit address space.
 
-### 4. Synchronization & System Calls
+### 5. System Calls, Synchronization & Centralized Logging
 **Assignee:** [Name]
-**Files:** `syscall.c`, `src/sys_xxxhandler.c`, `src/syscall.tbl`
-- [ ] Identify shared resources accessed by multiple virtual processors.
-- [ ] Implement locking mechanisms (e.g., mutexes, spinlocks) to protect shared data structures (queues, memory lists) from race conditions.
-- [ ] Create and register new system call handlers in the kernel interface.
-- [ ] Write user-space test programs (e.g., `sc`) to invoke and verify custom system calls.
+**Files:** `syscall.c`, `sys_xxxhandler.c`, `syscall.tbl`, Core Data Structures
+- [ ] Implement locking mechanisms (mutexes/spinlocks) to protect shared data structures (queues, memory lists) from race conditions in the multi-processor simulation.
+- [ ] Create and register new system call handlers in the kernel interface, ensuring user-space test programs (`sc`) work correctly.
+- [ ] Implement a centralized logging pipeline within the OS to trace segmentation faults, memory leaks, and context switches across CPUs, making debugging easier for the whole team.
 
-### 5. Integration, Build & Logging Pipeline
-**Assignee:** [Name]
-**Files:** `Makefile`, shell scripts, `input/` configs
-- [ ] Maintain the `Makefile` and build instructions for all environments.
-- [ ] Build a structured logging pipeline to capture OS events (context switches, page faults, memory allocations) to make debugging easier for the team.
-- [ ] Write automation scripts to run the compiled code against all test cases in the `input/` directory to ensure system stability.
-
-### 6. Technical Writing & Project Management
+### 6. Technical Documentation & Data Synthesis
 **Assignee:** [Name]
 **Files:** Final Report (PDF)
-- [ ] Draw the Gantt diagram describing CPU process execution scheduling based on team outputs.
+- [ ] Synthesize simulation outputs to draw the Gantt diagram describing CPU process execution scheduling.
 - [ ] Map and document the status of memory allocation in data segments.
-- [ ] Visualize and explain the multi-level paging address translation scheme.
-- [ ] Extract and compile statistics on memory accesses and multilevel paging storage size from the simulation.
-- [ ] Draft detailed answers for all theoretical questions embedded in the assignment specification.
-- [ ] Verify the codebase against GNU C coding standards and package the final `assignment_[STUDENTID].zip` file.
+- [ ] Visualize and explicitly explain the multi-level paging address translation scheme.
+- [ ] Extract and compile statistics on memory accesses and multilevel paging storage size.
+- [ ] Draft detailed, logical answers for all theoretical questions embedded in the assignment specification.
+- [ ] Verify the codebase against GNU C coding standards and typeset the final academic report (e.g., using LaTeX).
 
 ---
 
