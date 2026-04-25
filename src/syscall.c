@@ -10,6 +10,7 @@
 
 #include "syscall.h"
 #include "common.h"
+#include "log.h"
 
 #define __SYSCALL(nr, sym) extern int __##sym(struct krnl_t*, uint32_t,struct sc_regs*);
 #include "syscalltbl.lst"
@@ -32,15 +33,21 @@ int __sys_ni_syscall(struct krnl_t *krnl, struct sc_regs *regs)
     * DUMMY systemcall
     */
 
+   os_log(LOG_WARN, "syscall", "unimplemented syscall invoked");
    return 0;
 }
 
-#define __SYSCALL(nr, sym) case nr: return __##sym(krnl,pid,regs);
 int _syscall(struct krnl_t *krnl, uint32_t pid, uint32_t nr, struct sc_regs* regs)
 {
-	switch (nr) {
-	#include "syscalltbl.lst"
-	default: return __sys_ni_syscall(krnl, regs);
-	}
-};
+	int ret;
 
+	os_log(LOG_DEBUG, "syscall", "enter pid=%u nr=%u", pid, nr);
+	switch (nr) {
+	#define __SYSCALL(nr, sym) case nr: ret = __##sym(krnl,pid,regs); break;
+	#include "syscalltbl.lst"
+	#undef __SYSCALL
+	default: ret = __sys_ni_syscall(krnl, regs); break;
+	}
+	os_log(LOG_DEBUG, "syscall", "exit pid=%u nr=%u ret=%d", pid, nr, ret);
+	return ret;
+};

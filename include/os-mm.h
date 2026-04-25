@@ -11,6 +11,7 @@
 #ifndef OSMM_H
 #define OSMM_H
 
+#include <pthread.h>
 #include <stdint.h>
 
 #define MM_PAGING
@@ -146,6 +147,7 @@ struct memphy_struct {
    /* Management structure */
    struct framephy_struct *free_fp_list;
    struct framephy_struct *used_fp_list;
+   pthread_mutex_t lock;
 };
 
 #endif

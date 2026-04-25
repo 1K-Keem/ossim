@@ -4,6 +4,7 @@
 #include "sched.h"
 #include "loader.h"
 #include "mm.h"
+#include "log.h"
 #ifdef MM64
 #include "mm64.h"
 #endif
@@ -16,6 +17,7 @@
 static int time_slot;
 static int num_cpus;
 static int done = 0;
+static pthread_mutex_t done_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct krnl_t os;
 
 #ifdef MM_PAGING
@@ -47,6 +49,23 @@ struct cpu_args {
 	int id;
 };
 
+static int is_done(void)
+{
+	int ret;
+
+	pthread_mutex_lock(&done_lock);
+	ret = done;
+	pthread_mutex_unlock(&done_lock);
+	return ret;
+}
+
+static void set_done(void)
+{
+	pthread_mutex_lock(&done_lock);
+	done = 1;
+	pthread_mutex_unlock(&done_lock);
+}
+
 
 static void * cpu_routine(void * args) {
 	struct timer_id_t * timer_id = ((struct cpu_args*)args)->timer_id;
@@ -66,13 +85,16 @@ static void * cpu_routine(void * args) {
                         }
 		}else if (proc->pc == proc->code->size) {
 			/* The porcess has finish it job */
+			os_log(LOG_DEBUG, "sched", "cpu=%d finish pid=%u", id, proc->pid);
 			printf("\tCPU %d: Processed %2d has finished\n",
 				id ,proc->pid);
+			finish_proc(proc);
 			free(proc);
 			proc = get_proc();
 			time_left = 0;
 		}else if (time_left == 0) {
 			/* The process has done its job in current time slot */
+			os_log(LOG_DEBUG, "sched", "cpu=%d requeue pid=%u", id, proc->pid);
 			printf("\tCPU %d: Put process %2d to run queue\n",
 				id, proc->pid);
 			put_proc(proc);
@@ -80,7 +102,7 @@ static void * cpu_routine(void * args) {
 		}
 		
 		/* Recheck process status after loading new process */
-		if (proc == NULL && done) {
+		if (proc == NULL && is_done()) {
 			/* No process to run, exit */
 			printf("\tCPU %d stopped\n", id);
 			break;
@@ -90,6 +112,7 @@ static void * cpu_routine(void * args) {
 			next_slot(timer_id);
 			continue;
 		}else if (time_left == 0) {
+			os_log(LOG_DEBUG, "sched", "cpu=%d dispatch pid=%u", id, proc->pid);
 			printf("\tCPU %d: Dispatched process %2d\n",
 				id, proc->pid);
 			time_left = time_slot;
@@ -137,7 +160,9 @@ static void * ld_routine(void * args) {
 	printf("ld_routine\n");
 	while (i < num_processes) {
 		struct pcb_t * proc = load(ld_processes.path[i]);
-		struct krnl_t * krnl = proc->krnl = &os;	
+		struct krnl_t * krnl = malloc(sizeof(struct krnl_t));
+		*krnl = os;
+		proc->krnl = krnl;
 
 #ifdef MLQ_SCHED
 		proc->prio = ld_processes.prio[i];
@@ -161,7 +186,7 @@ static void * ld_routine(void * args) {
 	}
 	free(ld_processes.path);
 	free(ld_processes.start_time);
-	done = 1;
+	set_done();
 	detach_event(timer_id);
 	pthread_exit(NULL);
 }
@@ -299,6 +324,4 @@ int main(int argc, char * argv[]) {
 	return 0;
 
 }
-
-
 

@@ -13,6 +13,8 @@ int queue_empty(void);
 
 void init_scheduler(void);
 void finish_scheduler(void);
+struct pcb_t * find_proc(uint32_t pid);
+void finish_proc(struct pcb_t * proc);
 
 /* Get the next process from ready queue */
 struct pcb_t * get_proc(void);
@@ -24,5 +26,4 @@ void put_proc(struct pcb_t * proc);
 void add_proc(struct pcb_t * proc);
 
 #endif
-
 
