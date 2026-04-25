@@ -19,6 +19,7 @@
 #include "mm64.h"
 #include "syscall.h"
 #include "libmem.h"
+#include "log.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -200,9 +201,9 @@ int libfree(struct pcb_t *proc, uint32_t reg_index)
   int val = __free(proc, 0, reg_index);
   if (val == -1)
   {
+    os_log(LOG_WARN, "libmem", "pid=%u free failed rgid=%u", proc->pid, reg_index);
     return -1;
   }
-printf("%s:%d\n",__func__,__LINE__);
 #ifdef IODUMP
   /* TODO dump IO content (if needed) */
 #ifdef PAGETBL_DUMP
@@ -331,14 +332,22 @@ int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller)
  */
 int __read(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE *data)
 {
+  pthread_mutex_lock(&mmvm_lock);
   struct vm_rg_struct *currg = get_symrg_byid(caller->krnl->mm, rgid);
 
 //struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
 
   /* TODO Invalid memory identify */
+  if (currg == NULL || currg->rg_start == currg->rg_end)
+  {
+    pthread_mutex_unlock(&mmvm_lock);
+    os_log(LOG_WARN, "libmem", "pid=%u invalid read rgid=%d", caller->pid, rgid);
+    return -1;
+  }
 
   pg_getval(caller->krnl->mm, currg->rg_start + offset, data, caller);
 
+  pthread_mutex_unlock(&mmvm_lock);
   return 0;
 }
 
@@ -350,8 +359,10 @@ int libread(
     uint32_t* destination)
 {
   BYTE data;
-printf("%s:%d\n",__func__,__LINE__);
   int val = __read(proc, 0, source, offset, &data);
+
+  if (val == -1)
+    return -1;
 
   *destination = data;
 #ifdef IODUMP

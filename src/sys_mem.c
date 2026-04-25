@@ -11,8 +11,8 @@
 #include "os-mm.h"
 #include "syscall.h"
 #include "libmem.h"
-#include "queue.h"
-#include <stdlib.h>
+#include "sched.h"
+#include "log.h"
 
 #ifdef MM64
 #include "mm64.h"
@@ -26,27 +26,19 @@ int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs* regs)
 {
    int memop = regs->a1;
    BYTE value;
-   
-   /* TODO THIS DUMMY CREATE EMPTY PROC TO AVOID COMPILER NOTIFY 
-    *      need to be eliminated
-	*/
-   struct pcb_t *caller = malloc(sizeof(struct pcb_t));
-   caller->krnl = malloc(sizeof(struct krnl_t));
+   struct pcb_t *caller = find_proc(pid);
 
    /*
     * @bksysnet: Please note in the dual spacing design
     *            syscall implementations are in kernel space.
     */
 
-   /* TODO: Traverse proclist to terminate the proc
-    *       stcmp to check the process match proc_name
-    */
-//	struct queue_t *running_list = krnl->running_list;
+   if (krnl == NULL || caller == NULL) {
+            os_log(LOG_ERROR, "sys_mem", "pid=%u not found for memop=%d", pid, memop);
+            return -1;
+   }
 
-    /* TODO Maching and marking the process */
-    /* user process are not allowed to access directly pcb in kernel space of syscall */
-    //....
-	
+   os_log(LOG_DEBUG, "sys_mem", "pid=%u memop=%d", pid, memop);
    switch (memop) {
    case SYSMEM_MAP_OP:
             /* Reserved process case*/
@@ -59,18 +51,23 @@ int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs* regs)
             __mm_swap_page(caller, regs->a2, regs->a3);
             break;
    case SYSMEM_IO_READ:
-            MEMPHY_read(caller->krnl->mram, regs->a2, &value);
+            if (MEMPHY_read(caller->krnl->mram, regs->a2, &value) < 0) {
+                     os_log(LOG_ERROR, "sys_mem", "pid=%u read failed addr=" FORMAT_ADDR, pid, regs->a2);
+                     return -1;
+            }
             regs->a3 = value;
             break;
    case SYSMEM_IO_WRITE:
-            MEMPHY_write(caller->krnl->mram, regs->a2, regs->a3);
+            if (MEMPHY_write(caller->krnl->mram, regs->a2, regs->a3) < 0) {
+                     os_log(LOG_ERROR, "sys_mem", "pid=%u write failed addr=" FORMAT_ADDR, pid, regs->a2);
+                     return -1;
+            }
             break;
    default:
-            printf("Memop code: %d\n", memop);
-            break;
+            os_log(LOG_WARN, "sys_mem", "pid=%u unknown memop=%d", pid, memop);
+            return -1;
    }
    
    return 0;
 }
-
 
