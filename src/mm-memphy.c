@@ -201,10 +201,47 @@ int MEMPHY_get_freefp(struct memphy_struct *mp, addr_t *retfpn)
 
 int MEMPHY_dump(struct memphy_struct *mp)
 {
-  /*TODO dump memphy contnt mp->storage
-   *     for tracing the memory content
-   */
-   return 0;
+  /* Dump memphy content mp->storage for tracing the memory content */
+  if (mp == NULL || mp->storage == NULL)
+    return -1;
+
+  printf("MEMPHY Dump (size: %d bytes):\n", mp->maxsz);
+  printf("Address  | 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F | ASCII\n");
+  printf("---------|---------------------------------------------------|------\n");
+
+  for (addr_t addr = 0; addr < (addr_t)mp->maxsz; addr += 16) {
+    printf("%08llX | ", (unsigned long long)addr);
+
+    // Print hex values
+    for (int i = 0; i < 16; i++) {
+      if (addr + i < (addr_t)mp->maxsz) {
+        printf("%02X ", mp->storage[addr + i]);
+      } else {
+        printf("   ");
+      }
+    }
+
+    printf("| ");
+
+    // Print ASCII representation
+    for (int i = 0; i < 16; i++) {
+      if (addr + i < (addr_t)mp->maxsz) {
+        BYTE b = mp->storage[addr + i];
+        if (b >= 32 && b <= 126) {
+          printf("%c", b);
+        } else {
+          printf(".");
+        }
+      } else {
+        printf(" ");
+      }
+    }
+
+    printf("\n");
+  }
+
+  printf("\n");
+  return 0;
 }
 
 int MEMPHY_put_freefp(struct memphy_struct *mp, addr_t fpn)
