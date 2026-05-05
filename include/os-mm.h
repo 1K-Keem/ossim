@@ -80,19 +80,32 @@ struct vm_area_struct {
    struct vm_area_struct *vm_next;
 };
 
+struct kmem_cache_slot_struct {
+   addr_t addr;  // Virtual address of the slot
+   struct kmem_cache_slot_struct *next;  // Next free slot in the list
+};
+
+struct kmem_cache_slab_struct {
+   addr_t start;  // Starting virtual address of the slab
+   int slot_size;  // Size of each slot in bytes
+   int slot_count;  // Total number of slots in the slab
+   int free_count;  // Number of free slots remaining
+   struct kmem_cache_slot_struct *free_list;  // Linked list of free slots
+   struct kmem_cache_slab_struct *next;  // Next slab in the cache pool
+};
 
 /* 
  * Kernel cache pool struct
+ * Manages multiple slabs for efficient memory allocation of fixed-size objects
  */
 struct kcache_pool_struct {
-   int size;
-   int align;
-
-#ifdef MM64
-   addr_t storage;
-#else
-   uint32_t storage;
-#endif
+   int size;  // Total size of the allocated memory block
+   int align;  // Alignment size for each slot
+   int slot_count;  // Total number of slots across all slabs
+   addr_t storage;  // Base virtual address of the allocated memory
+   struct kmem_cache_slab_struct *empty;  // Slabs with all slots free
+   struct kmem_cache_slab_struct *partial;  // Slabs with some slots allocated
+   struct kmem_cache_slab_struct *full;  // Slabs with all slots allocated
 };
 
 
@@ -119,7 +132,8 @@ struct mm_struct {
    struct pgn_t *fifo_pgn;
 
    /* kmem cache pool */
-   struct kcache_pool_struct *kcpooltbl;
+   struct kcache_pool_struct *kcpooltbl;  // Array of kernel cache pools
+   int kcpooltbl_size;  // Number of cache pools in the table
 
 };
 
