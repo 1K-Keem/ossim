@@ -11,47 +11,51 @@ int empty(struct queue_t *q)
 
 void enqueue(struct queue_t *q, struct pcb_t *proc)
 {
-        if (q == NULL || proc == NULL || q->size >= MAX_QUEUE_SIZE)
+        /* Append process to the back of the queue (FIFO). */
+        if (q == NULL || q->size >= MAX_QUEUE_SIZE)
                 return;
 
-        q->proc[q->size++] = proc;
+        q->proc[q->size] = proc;
+        q->size++;
 }
 
 struct pcb_t *dequeue(struct queue_t *q)
 {
-        struct pcb_t *proc;
-        int i;
-
-        if (empty(q))
+        /*
+         * Remove and return the front element (FIFO order).
+         * Within each priority level, processes run in the order they arrived.
+         */
+        if (q == NULL || q->size == 0)
                 return NULL;
 
-        proc = q->proc[0];
-        for (i = 1; i < q->size; i++)
-                q->proc[i - 1] = q->proc[i];
+        struct pcb_t *proc = q->proc[0];
+
+        /* Shift all remaining elements one position to the left. */
+        for (int i = 0; i < q->size - 1; i++)
+                q->proc[i] = q->proc[i + 1];
 
         q->size--;
-        q->proc[q->size] = NULL;
         return proc;
 }
 
 struct pcb_t *purgequeue(struct queue_t *q, struct pcb_t *proc)
 {
-        int i;
-
-        if (empty(q) || proc == NULL)
+        /* Remove a specific process from any position in the queue. */
+        if (q == NULL || proc == NULL)
                 return NULL;
 
-        for (i = 0; i < q->size; i++) {
-                if (q->proc[i] == proc) {
-                        struct pcb_t *removed = q->proc[i];
-                        int j;
+        for (int i = 0; i < q->size; i++)
+        {
+                if (q->proc[i] == proc)
+                {
+                        struct pcb_t *result = q->proc[i];
 
-                        for (j = i + 1; j < q->size; j++)
-                                q->proc[j - 1] = q->proc[j];
+                        /* Shift elements left to fill the gap. */
+                        for (int j = i; j < q->size - 1; j++)
+                                q->proc[j] = q->proc[j + 1];
 
                         q->size--;
-                        q->proc[q->size] = NULL;
-                        return removed;
+                        return result;
                 }
         }
 
