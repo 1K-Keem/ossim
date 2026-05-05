@@ -555,7 +555,8 @@ static addr_t *kernel_get_pte(struct krnl_t *krnl, addr_t addr)
   // Traverses the 5-level page table hierarchy
 
   addr_t pgd = 0, p4d = 0, pud = 0, pmd = 0, pt = 0;
-  get_pd_from_address(addr, &pgd, &p4d, &pud, &pmd, &pt);
+  if (get_pd_from_address(addr, &pgd, &p4d, &pud, &pmd, &pt) != 0)
+    return NULL;
 
   addr_t *p4d_ptr = (addr_t *)krnl->krnl_pgd[pgd];
   if (!p4d_ptr)
