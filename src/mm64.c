@@ -425,7 +425,7 @@ int init_mm(struct mm_struct *mm, struct pcb_t *caller)
   struct vm_area_struct *vma0 = malloc(sizeof(struct vm_area_struct));
   int symid;
 
-  /* TODO init page table directory */
+  /* init page table directory */
   mm->pgd = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
   mm->p4d = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
   mm->pud = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
@@ -451,13 +451,13 @@ int init_mm(struct mm_struct *mm, struct pcb_t *caller)
   struct vm_rg_struct *first_rg = init_vm_rg(vma0->vm_start, vma0->vm_end);
   enlist_vm_rg_node(&vma0->vm_freerg_list, first_rg);
 
-  /* TODO update VMA0 next */
+  /* update VMA0 next */
   vma0->vm_next = NULL;
 
   /* Point vma owner backward */
   vma0->vm_mm = mm; 
 
-  /* TODO: update mmap */
+  /* update mmap */
   mm->mmap = vma0;
 
   return 0;
@@ -561,15 +561,47 @@ int print_pgtbl(struct pcb_t *caller, addr_t start, addr_t end)
 //addr_t pgit;
 //struct krnl_t *krnl = caller->krnl;
 
+  struct mm_struct *mm = NULL;
   addr_t pgd=0;
   addr_t p4d=0;
   addr_t pud=0;
   addr_t pmd=0;
   addr_t pt=0;
+  addr_t pgn_start = 0;
+  addr_t pgn_end = 0;
+  addr_t pgn = 0;
 
-  get_pd_from_address(start, &pgd, &p4d, &pud, &pmd, &pt);
+  if (caller == NULL || caller->krnl == NULL || caller->krnl->mm == NULL)
+    return -1;
 
-  /* TODO traverse the page map and dump the page directory entries */
+  mm = caller->krnl->mm;
+
+  printf("print_pgtbl:\n");
+
+  pgn_start = start >> PAGING64_ADDR_PT_SHIFT;
+  if (end == (addr_t)-1)
+    pgn_end = PAGING64_MAX_PGN - 1;
+  else
+    pgn_end = end >> PAGING64_ADDR_PT_SHIFT;
+
+  if (pgn_end < pgn_start)
+    return 0;
+
+  /* Traverse the page map and dump the page directory entries */
+  for (pgn = pgn_start; pgn <= pgn_end; pgn++)
+  {
+    if (get_pd_from_pagenum(pgn, &pgd, &p4d, &pud, &pmd, &pt) != 0)
+      continue;
+
+    if (mm->pt[pt] == 0 && mm->pmd[pmd] == 0 && mm->pud[pud] == 0 && mm->p4d[p4d] == 0 && mm->pgd[pgd] == 0)
+      continue;
+
+    printf(" PDG=%lx P4g=%lx PUD=%lx PMD=%lx\n",
+           (unsigned long)mm->pgd[pgd],
+           (unsigned long)mm->p4d[p4d],
+           (unsigned long)mm->pud[pud],
+           (unsigned long)mm->pmd[pmd]);
+  }
 
   return 0;
 }
