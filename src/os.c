@@ -193,26 +193,27 @@ static void read_config(const char * path) {
 		malloc(sizeof(unsigned long) * num_processes);
 #ifdef MM_PAGING
 	int sit;
-#ifdef MM_FIXED_MEMSZ
-	/* We provide here a back compatible with legacy OS simulatiom config file
-         * In which, it have no addition config line for Mema, keep only one line
-	 * for legacy info 
-         *  [time slice] [N = Number of CPU] [M = Number of Processes to be run]
-         */
-        memramsz  =  0x100000000;
-        memswpsz[0] = 0x1000000;
+	char first_proc_line[256];
+	int has_first_proc_line = 0;
+	memramsz = 0x100000000UL;
+	memswpsz[0] = 0x1000000UL;
 	for(sit = 1; sit < PAGING_MAX_MMSWP; sit++)
 		memswpsz[sit] = 0;
-#else
-	/* Read input config of memory size: MEMRAM and upto 4 MEMSWP (mem swap)
-	 * Format: (size=0 result non-used memswap, must have RAM and at least 1 SWAP)
-	 *        MEM_RAM_SZ MEM_SWP0_SZ MEM_SWP1_SZ MEM_SWP2_SZ MEM_SWP3_SZ
-	*/
-	fscanf(file, "%lu\n", &memramsz);
-	for(sit = 0; sit < PAGING_MAX_MMSWP; sit++)
-		fscanf(file, "%lu", &(memswpsz[sit])); 
-
-       fscanf(file, "\n"); /* Final character */
+#ifndef MM_FIXED_MEMSZ
+	if (fgets(first_proc_line, sizeof(first_proc_line), file) != NULL) {
+		unsigned long memcfg[PAGING_MAX_MMSWP + 1];
+		char extra;
+		int nmem = sscanf(first_proc_line, "%lu %lu %lu %lu %lu %c",
+		                  &memcfg[0], &memcfg[1], &memcfg[2],
+		                  &memcfg[3], &memcfg[4], &extra);
+		if (nmem >= PAGING_MAX_MMSWP + 1) {
+			memramsz = memcfg[0];
+			for(sit = 0; sit < PAGING_MAX_MMSWP; sit++)
+				memswpsz[sit] = memcfg[sit + 1];
+		} else {
+			has_first_proc_line = 1;
+		}
+	}
 #endif
 #endif
 
@@ -227,9 +228,29 @@ static void read_config(const char * path) {
 		strcat(ld_processes.path[i], "input/proc/");
 		char proc[100];
 #ifdef MLQ_SCHED
-		fscanf(file, "%lu %s %lu\n", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+		if (
+#ifdef MM_PAGING
+		    has_first_proc_line &&
 #else
-		fscanf(file, "%lu %s\n", &ld_processes.start_time[i], proc);
+		    0 &&
+#endif
+		    i == 0) {
+			sscanf(first_proc_line, "%lu %s %lu", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+		} else {
+			fscanf(file, "%lu %s %lu\n", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+		}
+#else
+		if (
+#ifdef MM_PAGING
+		    has_first_proc_line &&
+#else
+		    0 &&
+#endif
+		    i == 0) {
+			sscanf(first_proc_line, "%lu %s", &ld_processes.start_time[i], proc);
+		} else {
+			fscanf(file, "%lu %s\n", &ld_processes.start_time[i], proc);
+		}
 #endif
 		strcat(ld_processes.path[i], proc);
 	}

@@ -802,7 +802,7 @@ int print_pgtbl(struct pcb_t *caller, addr_t start, addr_t end)
     if (pte_ptr == NULL || *pte_ptr == 0)
       continue;
 
-    printf(" PGD=%lx P4D=%lx PUD=%lx PMD=%lx PTE=%lx\n",
+    printf(" PGD=%016lx P4D=%016lx PUD=%016lx PMD=%016lx PTE=%016lx\n",
            (unsigned long)root[pgd],
            (unsigned long)p4d_ptr[p4d],
            (unsigned long)pud_ptr[pud],

@@ -307,13 +307,15 @@ int pg_getpage(struct mm_struct *mm, addr_t pgn, addr_t *fpn, struct pcb_t *call
 int pg_getval(struct mm_struct *mm, addr_t addr, BYTE *data, struct pcb_t *caller)
 {
   addr_t pgn;
-//int off = PAGING_OFFST(addr);
+  addr_t off;
   addr_t fpn;
 
 #ifdef MM64
   pgn = addr >> PAGING64_ADDR_PT_SHIFT;
+  off = addr & PAGING64_ADDR_OFFST_MASK;
 #else
   pgn = PAGING_PGN(addr);
+  off = PAGING_OFFST(addr);
 #endif
 
   if (pg_getpage(mm, pgn, &fpn, caller) != 0)
@@ -342,13 +344,15 @@ int pg_getval(struct mm_struct *mm, addr_t addr, BYTE *data, struct pcb_t *calle
 int pg_setval(struct mm_struct *mm, addr_t addr, BYTE value, struct pcb_t *caller)
 {
   addr_t pgn;
-//int off = PAGING_OFFST(addr);
+  addr_t off;
   addr_t fpn;
 
 #ifdef MM64
   pgn = addr >> PAGING64_ADDR_PT_SHIFT;
+  off = addr & PAGING64_ADDR_OFFST_MASK;
 #else
   pgn = PAGING_PGN(addr);
+  off = PAGING_OFFST(addr);
 #endif
 
   /* Get the page into RAM, swapping in from MEMSWAP if needed */

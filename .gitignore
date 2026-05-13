@@ -3,4 +3,6 @@
 *.md
 *.pdf
 *.txt
+*.exe
 tests/*
+output/*
