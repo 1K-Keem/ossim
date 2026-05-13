@@ -141,20 +141,8 @@ static void * ld_routine(void * args) {
 	int i = 0;
   /* TODO init kernel page table directory */
 #ifdef MM64
-	os.krnl_pgd = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
-	os.krnl_p4d = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
-	os.krnl_pud = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
-	os.krnl_pmd = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
-	os.krnl_pt = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
-
-	for (i = 0; i < PAGING64_MAX_PGN; i++)
-	{
-	   os.krnl_pgd[i] = (addr_t)os.krnl_p4d;
-	   os.krnl_p4d[i] = (addr_t)os.krnl_pud;
-	   os.krnl_pud[i] = (addr_t)os.krnl_pmd;
-	   os.krnl_pmd[i] = (addr_t)os.krnl_pt;
-	   os.krnl_pt[i] = 0;
-	}
+	memset(&os, 0, sizeof(os));
+	init_kernel_page_table(&os);
 #else
 	os.krnl_pgd = malloc(PAGING_MAX_PGN * sizeof(uint32_t));
 #endif

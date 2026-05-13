@@ -129,6 +129,7 @@ int pte_set_fpn(struct pcb_t *caller, addr_t pgn, addr_t fpn);
 int pte_set_swap(struct pcb_t *caller, addr_t pgn, int swptyp, addr_t swpoff);
 uint32_t pte_get_entry(struct pcb_t *caller, addr_t pgn);
 int pte_set_entry(struct pcb_t *caller, addr_t pgn, uint32_t pte_val);
+int init_kernel_page_table(struct krnl_t *krnl);
 int init_pte(addr_t *pte,
              int pre,    // present
              addr_t fpn,    // FPN
