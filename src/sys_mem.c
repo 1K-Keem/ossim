@@ -45,7 +45,8 @@ int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs* regs)
    switch (memop) {
    case SYSMEM_MAP_OP:
             /* Reserved process case*/
-			ret = vmap_pgd_memset(caller, regs->a2, regs->a3);
+			if (vmap_pgd_memset(caller, regs->a2, regs->a3) != 0)
+               return -1;
             break;
    case SYSMEM_INC_OP:
             ret = inc_vma_limit(caller, regs->a2, regs->a3);
