@@ -11,7 +11,9 @@
 #include "os-mm.h"
 #include "syscall.h"
 #include "libmem.h"
+#define OSSIM_PROJECT_SCHED_H
 #include "sched.h"
+#undef OSSIM_PROJECT_SCHED_H
 #include "log.h"
 
 #ifdef MM64
@@ -25,6 +27,7 @@
 int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs* regs)
 {
    int memop = regs->a1;
+   int ret = 0;
    BYTE value;
    struct pcb_t *caller = find_proc(pid);
 
@@ -42,13 +45,13 @@ int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs* regs)
    switch (memop) {
    case SYSMEM_MAP_OP:
             /* Reserved process case*/
-			vmap_pgd_memset(caller, regs->a2, regs->a3);
+			ret = vmap_pgd_memset(caller, regs->a2, regs->a3);
             break;
    case SYSMEM_INC_OP:
-            inc_vma_limit(caller, regs->a2, regs->a3);
+            ret = inc_vma_limit(caller, regs->a2, regs->a3);
             break;
    case SYSMEM_SWP_OP:
-            __mm_swap_page(caller, regs->a2, regs->a3);
+            ret = __mm_swap_page(caller, regs->a2, regs->a3);
             break;
    case SYSMEM_IO_READ:
             if (MEMPHY_read(caller->krnl->mram, regs->a2, &value) < 0) {
@@ -67,7 +70,11 @@ int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs* regs)
             os_log(LOG_WARN, "sys_mem", "pid=%u unknown memop=%d", pid, memop);
             return -1;
    }
+
+   if (ret < 0) {
+            os_log(LOG_ERROR, "sys_mem", "pid=%u memop=%d failed", pid, memop);
+            return -1;
+   }
    
    return 0;
 }
-

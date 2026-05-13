@@ -9,7 +9,9 @@
  */
 
 #include "queue.h"
+#define OSSIM_PROJECT_SCHED_H
 #include "sched.h"
+#undef OSSIM_PROJECT_SCHED_H
 #include <pthread.h>
 
 #include <stdlib.h>
