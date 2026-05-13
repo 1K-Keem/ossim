@@ -163,6 +163,10 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, addr_t inc_sz);
 int find_victim_page(struct mm_struct* mm, addr_t *pgn);
 struct vm_area_struct *get_vma_by_num(struct mm_struct *mm, int vmaid);
 
+/* Virtual-address I/O — translate via page table before physical access */
+int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller);
+int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller);
+
 /* MEM/PHY protypes */
 int MEMPHY_get_freefp(struct memphy_struct *mp, addr_t *fpn);
 int MEMPHY_put_freefp(struct memphy_struct *mp, addr_t fpn);
