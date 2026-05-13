@@ -1,14 +1,9 @@
-#if defined(_PTHREAD_H) && !defined(_BITS_PTHREADTYPES_COMMON_H)
-  /* Being pulled in from within pthread.h before pthreadtypes.h:
-   * forward to the real system sched.h and do NOT set QUEUE_H. */
-  #ifndef _PROJECT_SCHED_DETOUR_H
-  #define _PROJECT_SCHED_DETOUR_H
-  #include_next <sched.h>
-  #endif
+#if defined(_PTHREAD_H) && !defined(OSSIM_PROJECT_SCHED_H)
+#include_next <sched.h>
 #else
 
-#ifndef QUEUE_H
-#define QUEUE_H
+#ifndef OSSIM_SCHED_H
+#define OSSIM_SCHED_H
 
 #include "common.h"
 
@@ -34,5 +29,5 @@ void put_proc(struct pcb_t * proc);
 /* Add a new process to ready queue */
 void add_proc(struct pcb_t * proc);
 
-#endif /* QUEUE_H */
-#endif /* pthread detour */
+#endif /* OSSIM_SCHED_H */
+#endif /* pthread system sched.h detour */

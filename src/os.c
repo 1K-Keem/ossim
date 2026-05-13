@@ -1,7 +1,9 @@
 
 #include "cpu.h"
-#include "timer.h"
+#define OSSIM_PROJECT_SCHED_H
 #include "sched.h"
+#undef OSSIM_PROJECT_SCHED_H
+#include "timer.h"
 #include "loader.h"
 #include "mm.h"
 #include "log.h"
@@ -324,4 +326,3 @@ int main(int argc, char * argv[]) {
 	return 0;
 
 }
-
