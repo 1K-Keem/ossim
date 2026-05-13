@@ -33,8 +33,8 @@ int __sys_ni_syscall(struct krnl_t *krnl, struct sc_regs *regs)
     * DUMMY systemcall
     */
 
-   os_log(LOG_WARN, "syscall", "unimplemented syscall invoked");
-   return 0;
+	os_log(LOG_WARN, "syscall", "unimplemented syscall invoked");
+	return -1;
 }
 
 int _syscall(struct krnl_t *krnl, uint32_t pid, uint32_t nr, struct sc_regs* regs)

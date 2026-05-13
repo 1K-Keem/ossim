@@ -1,7 +1,9 @@
 
 #include "cpu.h"
-#include "timer.h"
+#define OSSIM_PROJECT_SCHED_H
 #include "sched.h"
+#undef OSSIM_PROJECT_SCHED_H
+#include "timer.h"
 #include "loader.h"
 #include "mm.h"
 #include "log.h"
@@ -218,9 +220,9 @@ static void read_config(const char * path) {
 	 * Format: (size=0 result non-used memswap, must have RAM and at least 1 SWAP)
 	 *        MEM_RAM_SZ MEM_SWP0_SZ MEM_SWP1_SZ MEM_SWP2_SZ MEM_SWP3_SZ
 	*/
-	fscanf(file, FORMAT_ARG "\n", &memramsz);
+	fscanf(file, "%lu\n", &memramsz);
 	for(sit = 0; sit < PAGING_MAX_MMSWP; sit++)
-		fscanf(file, FORMAT_ARG, &(memswpsz[sit])); 
+		fscanf(file, "%lu", &(memswpsz[sit])); 
 
        fscanf(file, "\n"); /* Final character */
 #endif
@@ -324,4 +326,3 @@ int main(int argc, char * argv[]) {
 	return 0;
 
 }
-

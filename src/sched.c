@@ -1,10 +1,12 @@
 #include "queue.h"
+#define OSSIM_PROJECT_SCHED_H
 #include "sched.h"
+#undef OSSIM_PROJECT_SCHED_H
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-#define MAX_PRIO 3
+/* MAX_PRIO is defined in os-cfg.h (via common.h -> queue.h) */
 
 static struct queue_t ready_queue;
 static struct queue_t run_queue;
@@ -159,12 +161,55 @@ void add_mlq_proc(struct pcb_t *proc)
 
 	pthread_mutex_lock(&queue_lock);
 	enqueue(&mlq_ready_queue[proc->prio], proc);
+	/* Also track in running_list so find_proc() can locate this process */
+	enqueue(&running_list, proc);
 	pthread_mutex_unlock(&queue_lock);
 }
 
 struct pcb_t *get_proc(void) { return get_mlq_proc(); }
 void put_proc(struct pcb_t *proc) { put_mlq_proc(proc); }
 void add_proc(struct pcb_t *proc) { add_mlq_proc(proc); }
+
+/*
+ * find_proc - find a process by PID.
+ * All processes are tracked in running_list from the moment they are loaded
+ * (via add_mlq_proc) until they finish (via finish_proc).
+ */
+struct pcb_t *find_proc(uint32_t pid)
+{
+	pthread_mutex_lock(&queue_lock);
+	int i;
+	for (i = 0; i < running_list.size; i++) {
+		if (running_list.proc[i] != NULL &&
+		    running_list.proc[i]->pid == pid) {
+			struct pcb_t *p = running_list.proc[i];
+			pthread_mutex_unlock(&queue_lock);
+			return p;
+		}
+	}
+	pthread_mutex_unlock(&queue_lock);
+	return NULL;
+}
+
+/*
+ * finish_proc - remove a finished process from running_list.
+ */
+void finish_proc(struct pcb_t *proc)
+{
+	pthread_mutex_lock(&queue_lock);
+	int i;
+	for (i = 0; i < running_list.size; i++) {
+		if (running_list.proc[i] == proc) {
+			int j;
+			for (j = i; j < running_list.size - 1; j++)
+				running_list.proc[j] = running_list.proc[j + 1];
+			running_list.proc[running_list.size - 1] = NULL;
+			running_list.size--;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&queue_lock);
+}
 
 #else /* !MLQ_SCHED — simple FIFO ready queue */
 
@@ -202,3 +247,50 @@ void add_proc(struct pcb_t *proc)
 }
 
 #endif /* MLQ_SCHED */
+
+/*
+ * find_proc - search all queues for a process with the given PID.
+ * (non-MLQ fallback — also used when MLQ is off)
+ */
+#ifndef MLQ_SCHED
+struct pcb_t *find_proc(uint32_t pid)
+{
+	pthread_mutex_lock(&queue_lock);
+	int i;
+	for (i = 0; i < running_list.size; i++) {
+		if (running_list.proc[i] != NULL &&
+		    running_list.proc[i]->pid == pid) {
+			struct pcb_t *p = running_list.proc[i];
+			pthread_mutex_unlock(&queue_lock);
+			return p;
+		}
+	}
+	for (i = 0; i < ready_queue.size; i++) {
+		if (ready_queue.proc[i] != NULL &&
+		    ready_queue.proc[i]->pid == pid) {
+			struct pcb_t *p = ready_queue.proc[i];
+			pthread_mutex_unlock(&queue_lock);
+			return p;
+		}
+	}
+	pthread_mutex_unlock(&queue_lock);
+	return NULL;
+}
+
+void finish_proc(struct pcb_t *proc)
+{
+	pthread_mutex_lock(&queue_lock);
+	int i;
+	for (i = 0; i < running_list.size; i++) {
+		if (running_list.proc[i] == proc) {
+			int j;
+			for (j = i; j < running_list.size - 1; j++)
+				running_list.proc[j] = running_list.proc[j + 1];
+			running_list.proc[running_list.size - 1] = NULL;
+			running_list.size--;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&queue_lock);
+}
+#endif /* !MLQ_SCHED */

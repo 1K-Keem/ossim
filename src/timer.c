@@ -2,6 +2,7 @@
 #include "timer.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 static pthread_t _timer;
 
@@ -20,7 +21,7 @@ static int timer_stop = 0;
 
 static void * timer_routine(void * args) {
 	while (!timer_stop) {
-		printf("Time slot %3lu\n", current_time());
+		printf("Time slot %3" PRIu64 "\n", current_time());
 		int fsh = 0;
 		int event = 0;
 		/* Wait for all devices have done the job in current
@@ -130,7 +131,6 @@ void stop_timer() {
 		free(temp);
 	}
 }
-
 
 
 

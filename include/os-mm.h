@@ -12,6 +12,7 @@
 #define OSMM_H
 
 #include <pthread.h>
+#include <inttypes.h>
 #include <stdint.h>
 
 #define MM_PAGING
@@ -38,10 +39,10 @@ typedef ADDR_TYPE addr_t;
  *            based on the address mode
  */
 #ifdef MM64
-#define FORMAT_ADDR "%lu"
+#define FORMAT_ADDR "%" PRIu64
 #define FORMATX_ADDR "%16p"
 #else
-#define FORMAT_ADDR "%d"
+#define FORMAT_ADDR "%" PRIu32
 #define FORMATX_ADDR "%08x"
 #endif
 

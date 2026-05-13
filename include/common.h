@@ -4,6 +4,7 @@
 /* Define structs and routine could be used by every source files */
 
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 
 #ifndef OSCFG_H
@@ -41,9 +42,11 @@ typedef ARG_TYPE arg_t;
  *            based on the address mode
  */
 #ifdef MM64
-#define FORMAT_ARG "%lu"
+#define FORMAT_ARG "%" PRIu64
+#define SCAN_ARG "%" SCNu64
 #else
-#define FORMAT_ARG "%u"
+#define FORMAT_ARG "%" PRIu32
+#define SCAN_ARG "%" SCNu32
 #endif
 
 

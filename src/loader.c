@@ -83,20 +83,20 @@ struct pcb_t * load(const char * path) {
 		case ALLOC:
 			fscanf(
 				file,
-				"" FORMAT_ARG " " FORMAT_ARG "\n",
+				"" SCAN_ARG " " SCAN_ARG "\n",
 				&proc->code->text[i].arg_0,
 				&proc->code->text[i].arg_1
 			);
 			break;
 		case FREE:
-			fscanf(file, "" FORMAT_ARG "\n", &proc->code->text[i].arg_0);
+			fscanf(file, "" SCAN_ARG "\n", &proc->code->text[i].arg_0);
 			break;
 		case KMEM_CACHE_CREATE:
 		case READ:
 		case WRITE:
 			fscanf(
 				file,
-				"" FORMAT_ARG " " FORMAT_ARG " " FORMAT_ARG "\n",
+				"" SCAN_ARG " " SCAN_ARG " " SCAN_ARG "\n",
 				&proc->code->text[i].arg_0,
 				&proc->code->text[i].arg_1,
 				&proc->code->text[i].arg_2
@@ -106,7 +106,7 @@ struct pcb_t * load(const char * path) {
 		case COPY_TO_USER:
 		case SYSCALL:
 			fgets(buf, sizeof(buf), file);
-			sscanf(buf, "" FORMAT_ARG "" FORMAT_ARG "" FORMAT_ARG "" FORMAT_ARG "",
+			sscanf(buf, "" SCAN_ARG "" SCAN_ARG "" SCAN_ARG "" SCAN_ARG "",
 			           &proc->code->text[i].arg_0,
 			           &proc->code->text[i].arg_1,
 			           &proc->code->text[i].arg_2,
@@ -120,4 +120,3 @@ struct pcb_t * load(const char * path) {
 	}
 	return proc;
 }
-

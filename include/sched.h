@@ -1,5 +1,9 @@
-#ifndef QUEUE_H
-#define QUEUE_H
+#if defined(_PTHREAD_H) && !defined(OSSIM_PROJECT_SCHED_H)
+#include_next <sched.h>
+#else
+
+#ifndef OSSIM_SCHED_H
+#define OSSIM_SCHED_H
 
 #include "common.h"
 
@@ -25,5 +29,5 @@ void put_proc(struct pcb_t * proc);
 /* Add a new process to ready queue */
 void add_proc(struct pcb_t * proc);
 
-#endif
-
+#endif /* OSSIM_SCHED_H */
+#endif /* pthread system sched.h detour */
