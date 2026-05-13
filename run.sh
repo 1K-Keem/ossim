@@ -10,3 +10,4 @@
 ./os os_sc > output/os_sc.output
 ./os os_syscall > output/os_syscall.output
 ./os os_syscall_list > output/os_syscall_list.output
+./os os_kmem > output/os_kmem.output

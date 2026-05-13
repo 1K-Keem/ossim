@@ -27,6 +27,16 @@
 
 static pthread_mutex_t mmvm_lock = PTHREAD_MUTEX_INITIALIZER;
 
+#ifdef MM64
+#define KMEM_PAGE_SIZE PAGING64_PAGESZ
+#define KMEM_PAGE_ALIGN(sz) PAGING64_PAGE_ALIGNSZ(sz)
+#define KMEM_VADDR_BASE GENMASK64(63, 56)
+#else
+#define KMEM_PAGE_SIZE PAGING_PAGESZ
+#define KMEM_PAGE_ALIGN(sz) PAGING_PAGE_ALIGNSZ(sz)
+#define KMEM_VADDR_BASE 0
+#endif
+
 /*enlist_vm_freerg_list - add new rg to freerg_list
  *@mm: memory region
  *@rg_elmt: new region
@@ -526,10 +536,38 @@ static struct framephy_struct *kernel_get_free_frame_node(struct memphy_struct *
   return NULL;
 }
 
+static struct framephy_struct *kernel_get_used_frame_node(struct memphy_struct *mp, addr_t fpn)
+{
+  // Remove a specific frame node from the used frame list
+  // Returns the node if found, NULL otherwise
+
+  struct framephy_struct *prev = NULL;
+  struct framephy_struct *curr = mp->used_fp_list;
+
+  while (curr != NULL)
+  {
+    if (curr->fpn == fpn)
+    {
+      if (prev != NULL)
+        prev->fp_next = curr->fp_next;
+      else
+        mp->used_fp_list = curr->fp_next;
+      return curr;
+    }
+    prev = curr;
+    curr = curr->fp_next;
+  }
+
+  return NULL;
+}
+
 static int kernel_allocate_contiguous_frames(struct pcb_t *caller, int req_pgnum, addr_t *start_fpn)
 {
   // Allocate a contiguous block of physical frames for kernel memory
   // Finds consecutive free frames and marks them as used
+
+  if (caller == NULL || caller->krnl == NULL || caller->krnl->mram == NULL)
+    return -1;
 
   struct memphy_struct *mram = caller->krnl->mram;
   struct framephy_struct *fp;
@@ -565,22 +603,29 @@ static int kernel_allocate_contiguous_frames(struct pcb_t *caller, int req_pgnum
 
   qsort(list, count, sizeof(*list), framephy_compare);
 
-  int run = 1;
-  for (idx = 1; idx < count; idx++)
+  if (req_pgnum == 1)
   {
-    if (list[idx]->fpn == list[idx - 1]->fpn + 1)
+    select_start = 0;
+  }
+  else
+  {
+    int run = 1;
+    for (idx = 1; idx < count; idx++)
     {
-      run++;
-    }
-    else
-    {
-      run = 1;
-    }
+      if (list[idx]->fpn == list[idx - 1]->fpn + 1)
+      {
+        run++;
+      }
+      else
+      {
+        run = 1;
+      }
 
-    if (run == req_pgnum)
-    {
-      select_start = idx - req_pgnum + 1;
-      break;
+      if (run == req_pgnum)
+      {
+        select_start = idx - req_pgnum + 1;
+        break;
+      }
     }
   }
 
@@ -615,46 +660,62 @@ static addr_t *kernel_alloc_table(void)
   return calloc(PAGING64_MAX_PGN, sizeof(addr_t));
 }
 
-static addr_t *kernel_get_pte(struct krnl_t *krnl, addr_t addr)
+static addr_t *kernel_walk_pte(struct krnl_t *krnl, addr_t addr, int create)
 {
   addr_t pgd = 0, p4d = 0, pud = 0, pmd = 0, pt = 0;
+  if (krnl == NULL)
+    return NULL;
+
   if (get_pd_from_address(addr, &pgd, &p4d, &pud, &pmd, &pt) != 0)
     return NULL;
 
-  if (krnl->krnl_pgd == NULL && init_kernel_page_table(krnl) != 0)
-    return NULL;
+  if (krnl->krnl_pgd == NULL)
+  {
+    if (!create)
+      return NULL;
+    if (init_kernel_page_table(krnl) != 0)
+      return NULL;
+  }
 
   addr_t *p4d_ptr = (addr_t *)krnl->krnl_pgd[pgd];
-  if (p4d_ptr == NULL) {
+  if (p4d_ptr == NULL && create) {
     p4d_ptr = kernel_alloc_table();
     if (p4d_ptr == NULL)
       return NULL;
     krnl->krnl_pgd[pgd] = (addr_t)p4d_ptr;
   }
+  if (p4d_ptr == NULL)
+    return NULL;
 
   addr_t *pud_ptr = (addr_t *)p4d_ptr[p4d];
-  if (pud_ptr == NULL) {
+  if (pud_ptr == NULL && create) {
     pud_ptr = kernel_alloc_table();
     if (pud_ptr == NULL)
       return NULL;
     p4d_ptr[p4d] = (addr_t)pud_ptr;
   }
+  if (pud_ptr == NULL)
+    return NULL;
 
   addr_t *pmd_ptr = (addr_t *)pud_ptr[pud];
-  if (pmd_ptr == NULL) {
+  if (pmd_ptr == NULL && create) {
     pmd_ptr = kernel_alloc_table();
     if (pmd_ptr == NULL)
       return NULL;
     pud_ptr[pud] = (addr_t)pmd_ptr;
   }
+  if (pmd_ptr == NULL)
+    return NULL;
 
   addr_t *pt_ptr = (addr_t *)pmd_ptr[pmd];
-  if (pt_ptr == NULL) {
+  if (pt_ptr == NULL && create) {
     pt_ptr = kernel_alloc_table();
     if (pt_ptr == NULL)
       return NULL;
     pmd_ptr[pmd] = (addr_t)pt_ptr;
   }
+  if (pt_ptr == NULL)
+    return NULL;
 
   krnl->krnl_p4d = p4d_ptr;
   krnl->krnl_pud = pud_ptr;
@@ -663,15 +724,39 @@ static addr_t *kernel_get_pte(struct krnl_t *krnl, addr_t addr)
 
   return &pt_ptr[pt];
 }
-#else
+
 static addr_t *kernel_get_pte(struct krnl_t *krnl, addr_t addr)
+{
+  return kernel_walk_pte(krnl, addr, 1);
+}
+#else
+static addr_t *kernel_walk_pte(struct krnl_t *krnl, addr_t addr, int create)
 {
   // Get page table entry for 32-bit paging
   // Direct access to kernel page directory
 
+  (void)create;
+  if (krnl == NULL || krnl->krnl_pgd == NULL)
+    return NULL;
+
   return (addr_t *)&krnl->krnl_pgd[PAGING_PGN(addr)];
 }
+
+static addr_t *kernel_get_pte(struct krnl_t *krnl, addr_t addr)
+{
+  return kernel_walk_pte(krnl, addr, 1);
+}
 #endif
+
+static addr_t kernel_vaddr_from_fpn(addr_t fpn)
+{
+  return KMEM_VADDR_BASE + fpn * KMEM_PAGE_SIZE;
+}
+
+static addr_t kernel_fpn_from_vaddr(addr_t addr)
+{
+  return (addr - KMEM_VADDR_BASE) / KMEM_PAGE_SIZE;
+}
 
 static int kernel_map_page(struct krnl_t *krnl, addr_t addr, addr_t fpn)
 {
@@ -682,7 +767,76 @@ static int kernel_map_page(struct krnl_t *krnl, addr_t addr, addr_t fpn)
   if (pte == NULL)
     return -1;
 
-  init_pte(pte, 1, fpn, 0, 0, 0, 0);
+  *pte = 0;
+  SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
+  CLRBIT(*pte, PAGING_PTE_SWAPPED_MASK);
+  CLRBIT(*pte, PAGING_PTE_DIRTY_MASK);
+  SETVAL(*pte, fpn, PAGING_PTE_FPN_MASK, PAGING_PTE_FPN_LOBIT);
+
+  return 0;
+}
+
+static void kernel_release_contiguous_region(struct pcb_t *caller, addr_t base_addr, int pgnum)
+{
+  // Clear kernel page mappings and return the backing frames to the free list
+
+  if (caller == NULL || caller->krnl == NULL || caller->krnl->mram == NULL || pgnum <= 0)
+    return;
+
+  for (int page = 0; page < pgnum; page++)
+  {
+    addr_t vaddr = base_addr + page * KMEM_PAGE_SIZE;
+    addr_t *pte = kernel_walk_pte(caller->krnl, vaddr, 0);
+    if (pte != NULL)
+      *pte = 0;
+  }
+
+  addr_t first_fpn = kernel_fpn_from_vaddr(base_addr);
+  struct memphy_struct *mram = caller->krnl->mram;
+
+  pthread_mutex_lock(&mram->lock);
+  for (int page = 0; page < pgnum; page++)
+  {
+    struct framephy_struct *node = kernel_get_used_frame_node(mram, first_fpn + page);
+    if (node == NULL)
+      continue;
+
+    node->owner = NULL;
+    node->fp_next = mram->free_fp_list;
+    mram->free_fp_list = node;
+  }
+  pthread_mutex_unlock(&mram->lock);
+}
+
+static int kernel_alloc_contiguous_region(struct pcb_t *caller, addr_t size, addr_t *base_addr, addr_t *alloc_size)
+{
+  // Allocate contiguous physical frames and map them into kernel virtual space
+
+  if (caller == NULL || caller->krnl == NULL || size == 0 || base_addr == NULL)
+    return -1;
+
+  addr_t aligned_size = KMEM_PAGE_ALIGN(size);
+  int req_pgnum = aligned_size / KMEM_PAGE_SIZE;
+  addr_t first_fpn = 0;
+
+  if (kernel_allocate_contiguous_frames(caller, req_pgnum, &first_fpn) != 0)
+    return -1;
+
+  addr_t start_addr = kernel_vaddr_from_fpn(first_fpn);
+  for (int page = 0; page < req_pgnum; page++)
+  {
+    addr_t vaddr = start_addr + page * KMEM_PAGE_SIZE;
+    if (kernel_map_page(caller->krnl, vaddr, first_fpn + page) != 0)
+    {
+      kernel_release_contiguous_region(caller, start_addr, req_pgnum);
+      return -1;
+    }
+  }
+
+  *base_addr = start_addr;
+  if (alloc_size != NULL)
+    *alloc_size = aligned_size;
+
   return 0;
 }
 
@@ -691,7 +845,7 @@ static int kernel_translate_vaddr(struct krnl_t *krnl, addr_t addr, addr_t *phys
   // Translate kernel virtual address to physical address
   // Returns the physical address corresponding to the virtual address
 
-  addr_t *pte = kernel_get_pte(krnl, addr);
+  addr_t *pte = kernel_walk_pte(krnl, addr, 0);
   addr_t offset;
 
   if (pte == NULL || phys_addr == NULL)
@@ -707,13 +861,7 @@ static int kernel_translate_vaddr(struct krnl_t *krnl, addr_t addr, addr_t *phys
     return -1;
 
   addr_t fpn = PAGING_FPN(*pte);
-  *phys_addr = fpn * (
-#ifdef MM64
-      PAGING64_PAGESZ
-#else
-      PAGING_PAGESZ
-#endif
-  ) + offset;
+  *phys_addr = fpn * KMEM_PAGE_SIZE + offset;
 
   return 0;
 }
@@ -733,7 +881,8 @@ static int kernel_region_valid(struct pcb_t *caller, int rgid, addr_t size, addr
   if (rg == NULL || rg->rg_start == 0 || rg->rg_end <= rg->rg_start)
     return -1;
 
-  if (offset + size > rg->rg_end - rg->rg_start)
+  addr_t region_size = rg->rg_end - rg->rg_start;
+  if (size > region_size || offset > region_size - size)
     return -1;
 
   if (out_rg)
@@ -755,6 +904,8 @@ int libkmem_malloc(struct pcb_t * caller, uint32_t size, uint32_t reg_index)
 
   addr_t alloc_addr = 0;
   addr_t ret = __kmalloc(caller, -1, reg_index, size, &alloc_addr);
+  if (ret != (addr_t)-1)
+    caller->regs[reg_index] = alloc_addr;
   return (ret == (addr_t)-1) ? -1 : 0;
 }
 
@@ -779,45 +930,13 @@ addr_t __kmalloc(struct pcb_t *caller, int vmaid, int rgid, addr_t size, addr_t 
   if (symrg->rg_start != 0 || symrg->rg_end != 0)
     return (addr_t)-1;
 
-#ifdef MM64
-  addr_t alloc_size = PAGING64_PAGE_ALIGNSZ(size);
-  int req_pgnum = alloc_size / PAGING64_PAGESZ;
-#else
-  addr_t alloc_size = PAGING_PAGE_ALIGNSZ(size);
-  int req_pgnum = alloc_size / PAGING_PAGESZ;
-#endif
-
-  addr_t first_fpn = 0;
-
   pthread_mutex_lock(&mmvm_lock);
-  if (kernel_allocate_contiguous_frames(caller, req_pgnum, &first_fpn) != 0)
+  addr_t base_addr = 0;
+  addr_t alloc_size = 0;
+  if (kernel_alloc_contiguous_region(caller, size, &base_addr, &alloc_size) != 0)
   {
     pthread_mutex_unlock(&mmvm_lock);
     return (addr_t)-1;
-  }
-
-  addr_t base_addr = first_fpn * (
-#ifdef MM64
-      PAGING64_PAGESZ
-#else
-      PAGING_PAGESZ
-#endif
-  );
-
-  for (int page = 0; page < req_pgnum; page++)
-  {
-    addr_t vaddr = base_addr + page * (
-#ifdef MM64
-        PAGING64_PAGESZ
-#else
-        PAGING_PAGESZ
-#endif
-    );
-    if (kernel_map_page(caller->krnl, vaddr, first_fpn + page) != 0)
-    {
-      pthread_mutex_unlock(&mmvm_lock);
-      return (addr_t)-1;
-    }
   }
 
   symrg->rg_start = base_addr;
@@ -909,10 +1028,6 @@ int libkmem_cache_pool_create(struct pcb_t *caller, uint32_t size, uint32_t alig
   if (cache_pool_id >= PAGING_MAX_SYMTBL_SZ || size == 0 || align == 0)
     return -1;
 
-  addr_t alloc_addr = 0;
-  if (__kmalloc(caller, -1, cache_pool_id, size, &alloc_addr) == (addr_t)-1)
-    return -1;
-
   size_t usable_size = (size / align) * align;
   if (usable_size == 0)
     return -1;
@@ -956,6 +1071,13 @@ int libkmem_cache_pool_create(struct pcb_t *caller, uint32_t size, uint32_t alig
     return -1;
   }
 
+  addr_t alloc_addr = 0;
+  if (kernel_alloc_contiguous_region(caller, size, &alloc_addr, NULL) != 0)
+  {
+    pthread_mutex_unlock(&mmvm_lock);
+    return -1;
+  }
+
   pool->size = usable_size;
   pool->align = align;
   pool->storage = alloc_addr;
@@ -967,6 +1089,7 @@ int libkmem_cache_pool_create(struct pcb_t *caller, uint32_t size, uint32_t alig
   struct kmem_cache_slab_struct *slab = create_cache_slab(alloc_addr, align, slot_count);
   if (slab == NULL)
   {
+    kernel_release_contiguous_region(caller, alloc_addr, KMEM_PAGE_ALIGN(size) / KMEM_PAGE_SIZE);
     pthread_mutex_unlock(&mmvm_lock);
     return -1;
   }
@@ -976,7 +1099,7 @@ int libkmem_cache_pool_create(struct pcb_t *caller, uint32_t size, uint32_t alig
   return 0;
 }
 
-int libkmem_cache_alloc(struct pcb_t *proc, uint32_t cache_pool_id, uint32_t reg_index)
+int libkmem_cache_alloc(struct pcb_t *proc, uint32_t reg_index, uint32_t cache_pool_id)
 {
   // Allocate a single object from the specified cache pool
   // Returns 0 on success, -1 on failure
@@ -989,6 +1112,8 @@ int libkmem_cache_alloc(struct pcb_t *proc, uint32_t cache_pool_id, uint32_t reg
 
   addr_t addr = 0;
   addr_t result = __kmem_cache_alloc(proc, -1, reg_index, cache_pool_id, &addr);
+  if (result != (addr_t)-1)
+    proc->regs[reg_index] = addr;
   return (result == (addr_t)-1) ? -1 : 0;
 }
 
@@ -1018,6 +1143,13 @@ addr_t __kmem_cache_alloc(struct pcb_t *caller, int vmaid, int rgid, int cache_p
     return (addr_t)-1;
   }
 
+  struct vm_rg_struct *symrg = &mm->symrgtbl[rgid];
+  if (symrg->rg_start != 0 || symrg->rg_end != 0)
+  {
+    pthread_mutex_unlock(&mmvm_lock);
+    return (addr_t)-1;
+  }
+
   struct kmem_cache_slab_struct *slab = pool->partial ? pool->partial : pool->empty;
   if (slab == NULL || slab->free_list == NULL)
   {
@@ -1041,7 +1173,6 @@ addr_t __kmem_cache_alloc(struct pcb_t *caller, int vmaid, int rgid, int cache_p
     cache_list_add_slab(&pool->partial, slab);
   }
 
-  struct vm_rg_struct *symrg = &mm->symrgtbl[rgid];
   symrg->rg_start = slot->addr;
   symrg->rg_end = slot->addr + pool->align;
   symrg->vmaid = 0;
