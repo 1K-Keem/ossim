@@ -1,3 +1,12 @@
+#if defined(_PTHREAD_H) && !defined(_BITS_PTHREADTYPES_COMMON_H)
+  /* Being pulled in from within pthread.h before pthreadtypes.h:
+   * forward to the real system sched.h and do NOT set QUEUE_H. */
+  #ifndef _PROJECT_SCHED_DETOUR_H
+  #define _PROJECT_SCHED_DETOUR_H
+  #include_next <sched.h>
+  #endif
+#else
+
 #ifndef QUEUE_H
 #define QUEUE_H
 
@@ -25,5 +34,5 @@ void put_proc(struct pcb_t * proc);
 /* Add a new process to ready queue */
 void add_proc(struct pcb_t * proc);
 
-#endif
-
+#endif /* QUEUE_H */
+#endif /* pthread detour */
