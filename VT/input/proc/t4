@@ -1,0 +1,16 @@
+1 15
+alloc 4096 1
+alloc 4096 2
+alloc 4096 3
+alloc 4096 4
+write 1 1 0
+write 2 2 0
+write 3 3 0
+write 4 4 0
+alloc 4096 5
+write 12 1 4
+read 1 4 0
+write 13 3 0
+read 3 0 0
+write 14 2 0
+read 2 0 0

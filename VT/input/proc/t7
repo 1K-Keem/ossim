@@ -1,0 +1,5 @@
+1 4
+kmalloc 2024 0
+alloc 4096 2
+alloc 4096 3
+kmalloc 2024 1

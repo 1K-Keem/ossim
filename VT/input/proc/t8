@@ -1,0 +1,13 @@
+1 12
+alloc 4096 1
+alloc 4096 2
+kmalloc 2024 0
+write 13 1 0
+write 14 1 4
+write 15 1 8
+copy_from_user 1 0 0 1
+copy_from_user 1 0 4 8
+copy_to_user 0 2 4 8
+copy_to_user 0 2 0 1
+read 2 0 0
+read 2 8 0

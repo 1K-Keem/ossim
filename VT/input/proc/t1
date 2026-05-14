@@ -1,0 +1,8 @@
+1 7
+alloc 256 0
+alloc 512 1
+alloc 2048 2
+alloc 1280 3
+alloc 4096 4
+alloc 4096 5
+alloc 4096 6

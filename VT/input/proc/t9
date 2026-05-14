@@ -1,0 +1,14 @@
+1 13
+alloc 4096 1
+alloc 4096 2
+kmem_cache_create 300 10 1
+kmem_cache_alloc 1 3
+write 13 1 0
+write 14 1 4
+write 15 1 8
+copy_from_user 1 3 0 1
+copy_from_user 1 3 4 8
+copy_to_user 3 2 4 8
+copy_to_user 3 2 0 1
+read 2 0 0
+read 2 8 0

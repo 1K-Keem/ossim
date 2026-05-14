@@ -1,0 +1,21 @@
+--- /Users/lebaotanphong/Documents/ossim/VT/sample_output/result_sched/votien_sched_1.text	2026-05-12 22:08:48
++++ /Users/lebaotanphong/Documents/ossim/VT/output/result_sched/votien_sched_1.text	2026-05-14 16:36:41
+@@ -5,15 +5,15 @@
+ 	CPU 0: Dispatched process  1
+ Time slot   2
+ Time slot   3
+-	CPU 0: Put process  1 to run queue (pc=2/7)
++	CPU 0: Put process  1 to run queue
+ 	CPU 0: Dispatched process  1
+ Time slot   4
+ Time slot   5
+-	CPU 0: Put process  1 to run queue (pc=4/7)
++	CPU 0: Put process  1 to run queue
+ 	CPU 0: Dispatched process  1
+ Time slot   6
+ Time slot   7
+-	CPU 0: Put process  1 to run queue (pc=6/7)
++	CPU 0: Put process  1 to run queue
+ 	CPU 0: Dispatched process  1
+ Time slot   8
+ 	CPU 0: Processed  1 has finished

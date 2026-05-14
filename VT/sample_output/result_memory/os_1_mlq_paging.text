@@ -1,0 +1,154 @@
+Time slot   0
+ld_routine
+Time slot   1
+	Loaded a process at input/proc/p1s, PID: 1 PRIO: 15
+Time slot   2
+	CPU 3: Dispatched process  1
+Time slot   3
+Time slot   4
+	CPU 3: Put process  1 to run queue (pc=2/10)
+	CPU 3: Dispatched process  1
+Time slot   5
+	Loaded a process at input/proc/m0s, PID: 2 PRIO: 120
+Time slot   6
+	CPU 3: Put process  1 to run queue (pc=4/10)
+	CPU 3: Dispatched process  1
+	CPU 1: Dispatched process  2
+liballoc:226 pid=2 pc=1 alloc reg=0 size=300 addr=0x0
+Time slot   7
+liballoc:226 pid=2 pc=2 alloc reg=1 size=100 addr=0x12c
+	Loaded a process at input/proc/p0s, PID: 3 PRIO: 130
+Time slot   8
+	CPU 3: Put process  1 to run queue (pc=6/10)
+	CPU 3: Dispatched process  1
+	CPU 1: Put process  2 to run queue (pc=2/6)
+	CPU 2: Dispatched process  3
+	CPU 1: Dispatched process  2
+libfree:260 pid=2 pc=3 free reg=0
+Time slot   9
+	Loaded a process at input/proc/s0, PID: 4 PRIO: 38
+liballoc:226 pid=3 pc=2 alloc reg=0 size=300 addr=0x0
+liballoc:226 pid=2 pc=4 alloc reg=2 size=100 addr=0x0
+Time slot  10
+	CPU 3: Put process  1 to run queue (pc=8/10)
+	CPU 2: Put process  3 to run queue (pc=2/14)
+	CPU 1: Put process  2 to run queue (pc=4/6)
+	CPU 2: Dispatched process  4
+	CPU 0: Dispatched process  3
+	CPU 1: Dispatched process  2
+	CPU 3: Dispatched process  1
+liballoc:226 pid=3 pc=3 alloc reg=4 size=300 addr=0x12c
+libwrite:502 pid=2 pc=5 write data=102 reg=1 offset=20
+Time slot  11
+libwrite:502 pid=2 pc=6 write data=1 reg=2 offset=1000
+	Loaded a process at input/proc/s3, PID: 5 PRIO: 39
+libfree:260 pid=3 pc=4 free reg=0
+Time slot  12
+	CPU 2: Put process  4 to run queue (pc=2/15)
+	CPU 3: Processed  1 has finished
+	CPU 2: Dispatched process  4
+	CPU 1: Processed  2 has finished
+	CPU 0: Put process  3 to run queue (pc=4/14)
+	CPU 0: Dispatched process  3
+liballoc:226 pid=3 pc=5 alloc reg=1 size=100 addr=0x0
+	CPU 1: Dispatched process  5
+Time slot  13
+libwrite:502 pid=3 pc=6 write data=100 reg=1 offset=20
+Time slot  14
+	CPU 2: Put process  4 to run queue (pc=4/15)
+	CPU 1: Put process  5 to run queue (pc=2/11)
+	CPU 3: Dispatched process  4
+	CPU 0: Put process  3 to run queue (pc=6/14)
+	CPU 0: Dispatched process  3
+libread:444 pid=3 pc=7 read reg=1 offset=20 data=100 dest=100
+	CPU 1: Dispatched process  5
+	Loaded a process at input/proc/m1s, PID: 6 PRIO: 15
+Time slot  15
+	CPU 2: Dispatched process  6
+liballoc:226 pid=6 pc=1 alloc reg=0 size=300 addr=0x0
+libwrite:502 pid=3 pc=8 write data=102 reg=2 offset=20
+Time slot  16
+	CPU 3: Put process  4 to run queue (pc=6/15)
+liballoc:226 pid=6 pc=2 alloc reg=1 size=100 addr=0x12c
+	CPU 3: Dispatched process  4
+	CPU 1: Put process  5 to run queue (pc=4/11)
+	CPU 0: Put process  3 to run queue (pc=8/14)
+	CPU 1: Dispatched process  5
+	CPU 0: Dispatched process  3
+libread:444 pid=3 pc=9 read reg=2 offset=20 data=102 dest=102
+	Loaded a process at input/proc/s2, PID: 7 PRIO: 120
+Time slot  17
+	CPU 2: Put process  6 to run queue (pc=2/6)
+	CPU 2: Dispatched process  6
+libfree:260 pid=6 pc=3 free reg=0
+libwrite:502 pid=3 pc=10 write data=103 reg=3 offset=20
+	Loaded a process at input/proc/s1, PID: 8 PRIO: 0
+Time slot  18
+	CPU 3: Put process  4 to run queue (pc=8/15)
+liballoc:226 pid=6 pc=4 alloc reg=2 size=100 addr=0x0
+	CPU 1: Put process  5 to run queue (pc=6/11)
+	CPU 3: Dispatched process  8
+	CPU 1: Dispatched process  4
+	CPU 0: Put process  3 to run queue (pc=10/14)
+	CPU 0: Dispatched process  5
+Time slot  19
+	CPU 2: Put process  6 to run queue (pc=4/6)
+	CPU 2: Dispatched process  6
+libfree:260 pid=6 pc=5 free reg=2
+Time slot  20
+	CPU 3: Put process  8 to run queue (pc=2/7)
+	CPU 1: Put process  4 to run queue (pc=10/15)
+	CPU 1: Dispatched process  4
+	CPU 0: Put process  5 to run queue (pc=8/11)
+	CPU 3: Dispatched process  8
+	CPU 0: Dispatched process  5
+libfree:260 pid=6 pc=6 free reg=1
+Time slot  21
+	CPU 2: Processed  6 has finished
+	CPU 2: Dispatched process  7
+Time slot  22
+	CPU 3: Put process  8 to run queue (pc=4/7)
+	CPU 1: Put process  4 to run queue (pc=12/15)
+	CPU 3: Dispatched process  8
+	CPU 1: Dispatched process  4
+	CPU 0: Put process  5 to run queue (pc=10/11)
+	CPU 0: Dispatched process  5
+Time slot  23
+	CPU 0: Processed  5 has finished
+	CPU 2: Put process  7 to run queue (pc=2/12)
+	CPU 2: Dispatched process  7
+	CPU 0: Dispatched process  3
+libread:444 pid=3 pc=11 read reg=3 offset=20 data=103 dest=103
+Time slot  24
+	CPU 3: Put process  8 to run queue (pc=6/7)
+	CPU 1: Put process  4 to run queue (pc=14/15)
+	CPU 1: Dispatched process  4
+	CPU 3: Dispatched process  8
+	CPU 3: Processed  8 has finished
+Time slot  25
+	CPU 3 stopped
+	CPU 2: Put process  7 to run queue (pc=4/12)
+	CPU 1: Processed  4 has finished
+	CPU 2: Dispatched process  7
+	CPU 0: Put process  3 to run queue (pc=12/14)
+	CPU 1 stopped
+	CPU 0: Dispatched process  3
+libfree:260 pid=3 pc=13 free reg=4
+Time slot  26
+Time slot  27
+	CPU 2: Put process  7 to run queue (pc=6/12)
+	CPU 0: Processed  3 has finished
+	CPU 2: Dispatched process  7
+	CPU 0 stopped
+Time slot  28
+Time slot  29
+	CPU 2: Put process  7 to run queue (pc=8/12)
+	CPU 2: Dispatched process  7
+Time slot  30
+Time slot  31
+	CPU 2: Put process  7 to run queue (pc=10/12)
+	CPU 2: Dispatched process  7
+Time slot  32
+Time slot  33
+	CPU 2: Processed  7 has finished
+	CPU 2 stopped

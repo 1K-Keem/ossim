@@ -1,0 +1,141 @@
+#!/bin/sh
+
+set -eu
+
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+VT_DIR="$ROOT_DIR/VT"
+VT_INPUT="$VT_DIR/input"
+VT_SAMPLE="$VT_DIR/sample_output"
+VT_OUTPUT="$VT_DIR/output"
+VT_WORK="$VT_DIR/.run_workspace"
+OS_BIN="$ROOT_DIR/os"
+
+if [ ! -d "$VT_INPUT" ]; then
+	echo "Missing VT input directory: $VT_INPUT" >&2
+	exit 1
+fi
+
+if [ ! -x "$OS_BIN" ]; then
+	(cd "$ROOT_DIR" && make all)
+fi
+
+rm -rf "$VT_WORK"
+mkdir -p "$VT_WORK/input/proc"
+
+for src in "$VT_INPUT"/*; do
+	[ -f "$src" ] || continue
+	case "$(basename -- "$src")" in
+		.*)
+			continue
+			;;
+	esac
+	sed 's/[[:space:]]*\/\/.*$//' "$src" | sed '/^[[:space:]]*$/d' > "$VT_WORK/input/$(basename -- "$src")"
+done
+
+for src in "$VT_INPUT"/proc/*; do
+	[ -f "$src" ] || continue
+	case "$(basename -- "$src")" in
+		.*)
+			continue
+			;;
+	esac
+	sed 's/[[:space:]]*\/\/.*$//' "$src" | sed '/^[[:space:]]*$/d' > "$VT_WORK/input/proc/$(basename -- "$src")"
+done
+
+rm -rf "$VT_OUTPUT"
+mkdir -p \
+	"$VT_OUTPUT/result_memory" \
+	"$VT_OUTPUT/result_sched" \
+	"$VT_OUTPUT/diff" \
+	"$VT_OUTPUT/stderr"
+
+run_case() {
+	tc=$1
+	out_file=$2
+	err_file=$3
+
+	mkdir -p "$(dirname -- "$out_file")" "$(dirname -- "$err_file")"
+	(cd "$VT_WORK" && "$OS_BIN" "$tc") > "$out_file" 2> "$err_file"
+}
+
+compare_case() {
+	name=$1
+	out_file=$2
+	sample_file=$3
+	diff_file=$4
+
+	if [ ! -f "$sample_file" ]; then
+		echo "MISS sample: $name -> $sample_file"
+		return 1
+	fi
+
+	if diff -u "$sample_file" "$out_file" > "$diff_file"; then
+		rm -f "$diff_file"
+		echo "PASS $name"
+		return 0
+	fi
+
+	echo "DIFF $name -> $diff_file"
+	return 1
+}
+
+total=0
+failed=0
+
+for cfg in "$VT_INPUT"/votien_*; do
+	[ -f "$cfg" ] || continue
+	case "$(basename -- "$cfg")" in
+		.*)
+			continue
+			;;
+	esac
+
+	tc=$(basename -- "$cfg")
+	total=$((total + 1))
+
+	case "$tc" in
+		votien_memory_*)
+			out_file="$VT_OUTPUT/result_memory/$tc.text"
+			sample_file="$VT_SAMPLE/result_memory/$tc.text"
+			diff_file="$VT_OUTPUT/diff/$tc.diff"
+			;;
+		votien_sched_*)
+			out_file="$VT_OUTPUT/result_sched/$tc.text"
+			sample_file="$VT_SAMPLE/result_sched/$tc.text"
+			diff_file="$VT_OUTPUT/diff/$tc.diff"
+			;;
+		votien_shed_*)
+			out_file="$VT_OUTPUT/$tc.out"
+			sample_file="$VT_SAMPLE/$tc.out"
+			diff_file="$VT_OUTPUT/diff/$tc.diff"
+			;;
+		*)
+			out_file="$VT_OUTPUT/$tc.out"
+			sample_file="$VT_SAMPLE/$tc.out"
+			diff_file="$VT_OUTPUT/diff/$tc.diff"
+			;;
+	esac
+
+	err_file="$VT_OUTPUT/stderr/$tc.err"
+	if ! run_case "$tc" "$out_file" "$err_file"; then
+		echo "RUN_FAIL $tc -> $err_file"
+		failed=$((failed + 1))
+		continue
+	fi
+
+	if [ -s "$err_file" ]; then
+		echo "STDERR $tc -> $err_file"
+	fi
+
+	if ! compare_case "$tc" "$out_file" "$sample_file" "$diff_file"; then
+		failed=$((failed + 1))
+	fi
+done
+
+rm -rf "$VT_WORK"
+
+echo "VT summary: $((total - failed))/$total passed"
+
+if [ "$failed" -ne 0 ]; then
+	exit 1
+fi

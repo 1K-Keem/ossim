@@ -1,0 +1,10 @@
+1 9
+alloc 2048 1
+alloc 2048 2
+write 12 1 8
+read 1 8 0
+alloc 4096 3
+write 13 2 0
+read 2 0 0
+write 25 3 20
+read 3 20 0

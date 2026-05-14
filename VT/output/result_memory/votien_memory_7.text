@@ -1,0 +1,24 @@
+Time slot   0
+ld_routine
+	Loaded a process at input/proc/t7, PID: 1 PRIO: 1
+Time slot   1
+	CPU 0: Dispatched process  1
+Time slot   2
+	CPU 0: Put process  1 to run queue
+	CPU 0: Dispatched process  1
+liballoc:234
+print_pgtbl:
+ PGD=000000071d029000 P4D=000000071d02a000 PUD=000000071d02b000 PMD=000000071d02c000 PTE=0000000000001001
+Time slot   3
+	CPU 0: Put process  1 to run queue
+	CPU 0: Dispatched process  1
+liballoc:234
+print_pgtbl:
+ PGD=000000071d029000 P4D=000000071d02a000 PUD=000000071d02b000 PMD=000000071d02c000 PTE=0000000000001001
+ PGD=000000071d029000 P4D=000000071d02a000 PUD=000000071d02b000 PMD=000000071d02c000 PTE=0000000000002001
+Time slot   4
+	CPU 0: Put process  1 to run queue
+	CPU 0: Dispatched process  1
+Time slot   5
+	CPU 0: Processed  1 has finished
+	CPU 0 stopped

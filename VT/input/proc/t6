@@ -1,0 +1,14 @@
+1 13
+alloc 256 0
+alloc 512 1
+alloc 2048 2
+alloc 1280 3
+alloc 2048 4
+alloc 2048 5
+alloc 2048 6
+free 0
+free 1
+free 2
+free 5
+free 3
+alloc 4000 7
