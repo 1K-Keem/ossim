@@ -63,6 +63,7 @@ int queue_empty(void)
 		}
 	ret = 1;
 #else
+	/* Legacy non-MLQ path; current assignment build uses MLQ_SCHED. */
 	ret = (empty(&ready_queue) && empty(&run_queue));
 #endif
 	pthread_mutex_unlock(&queue_lock);

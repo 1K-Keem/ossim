@@ -14,4 +14,5 @@
 
 0       listsyscall sys_listsyscall
 17      memmap	    sys_memmap
+101     compat101   sys_compat101
 440     xxx         sys_xxxhandler

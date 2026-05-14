@@ -296,4 +296,31 @@ int init_memphy(struct memphy_struct *mp, addr_t max_size, int randomflg)
    return 0;
 }
 
+static void MEMPHY_free_frame_list(struct framephy_struct *fp)
+{
+   while (fp != NULL) {
+      struct framephy_struct *next = fp->fp_next;
+      free(fp);
+      fp = next;
+   }
+}
+
+void MEMPHY_cleanup(struct memphy_struct *mp)
+{
+   if (mp == NULL)
+      return;
+
+   MEMPHY_free_frame_list(mp->free_fp_list);
+   MEMPHY_free_frame_list(mp->used_fp_list);
+   free(mp->storage);
+   pthread_mutex_destroy(&mp->lock);
+
+   mp->storage = NULL;
+   mp->maxsz = 0;
+   mp->rdmflg = 0;
+   mp->cursor = 0;
+   mp->free_fp_list = NULL;
+   mp->used_fp_list = NULL;
+}
+
 // #endif

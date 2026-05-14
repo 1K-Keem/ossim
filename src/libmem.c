@@ -30,7 +30,7 @@ static pthread_mutex_t mmvm_lock = PTHREAD_MUTEX_INITIALIZER;
 #ifdef MM64
 #define KMEM_PAGE_SIZE PAGING64_PAGESZ
 #define KMEM_PAGE_ALIGN(sz) PAGING64_PAGE_ALIGNSZ(sz)
-#define KMEM_VADDR_BASE GENMASK64(63, 56)
+#define KMEM_VADDR_BASE 0xffff800000000000ULL
 #else
 #define KMEM_PAGE_SIZE PAGING_PAGESZ
 #define KMEM_PAGE_ALIGN(sz) PAGING_PAGE_ALIGNSZ(sz)
@@ -41,6 +41,338 @@ static pthread_mutex_t mmvm_lock = PTHREAD_MUTEX_INITIALIZER;
 static int is_kernel_vaddr_range(addr_t start, addr_t end);
 static int is_user_vaddr_range(addr_t start, addr_t end);
 #endif
+static addr_t *kernel_walk_pte(struct krnl_t *krnl, addr_t addr, int create);
+
+static void trace_print_addr(addr_t addr)
+{
+  printf("0x%llx", (unsigned long long)addr);
+}
+
+static int trace_proc_has_kernel_ops(struct pcb_t *proc)
+{
+  if (proc == NULL || proc->code == NULL || proc->code->text == NULL)
+    return 0;
+
+  for (uint32_t idx = 0; idx < proc->code->size; idx++)
+  {
+    enum ins_opcode_t opcode = proc->code->text[idx].opcode;
+    if (opcode == KMALLOC || opcode == KMEM_CACHE_CREATE ||
+        opcode == KMEM_CACHE_ALLOC || opcode == COPY_FROM_USER ||
+        opcode == COPY_TO_USER)
+      return 1;
+  }
+
+  return 0;
+}
+
+static int trace_has_kernel_state(struct pcb_t *proc)
+{
+  struct mm_struct *mm = NULL;
+
+  if (trace_proc_has_kernel_ops(proc))
+    return 1;
+
+  if (proc == NULL || proc->krnl == NULL || proc->krnl->mm == NULL)
+    return 0;
+
+  mm = proc->krnl->mm;
+  for (int idx = 0; idx < PAGING_MAX_SYMTBL_SZ; idx++)
+  {
+    struct vm_rg_struct *rg = &mm->symrgtbl[idx];
+    if (rg->rg_end > rg->rg_start && rg->rg_start >= KMEM_VADDR_BASE)
+      return 1;
+  }
+
+  return mm->kcpooltbl != NULL && mm->kcpooltbl_size > 0;
+}
+
+static int trace_frame_is_free(struct memphy_struct *mp, addr_t fpn)
+{
+  struct framephy_struct *fp = mp ? mp->free_fp_list : NULL;
+
+  while (fp != NULL)
+  {
+    if (fp->fpn == fpn)
+      return 1;
+    fp = fp->fp_next;
+  }
+
+  return 0;
+}
+
+static void trace_print_frame_list(struct framephy_struct *fp)
+{
+  if (fp == NULL)
+  {
+    printf("(empty)");
+    return;
+  }
+
+  while (fp != NULL)
+  {
+    printf("[%llu] ", (unsigned long long)fp->fpn);
+    fp = fp->fp_next;
+  }
+}
+
+static void trace_print_used_frames(struct memphy_struct *mp)
+{
+  int total_frames;
+  int printed = 0;
+
+  if (mp == NULL || mp->maxsz <= 0)
+  {
+    printf("(empty)");
+    return;
+  }
+
+  total_frames = mp->maxsz / KMEM_PAGE_SIZE;
+  for (int fpn = total_frames - 1; fpn >= 0; fpn--)
+  {
+    if (!trace_frame_is_free(mp, (addr_t)fpn))
+    {
+      printf("[%d] ", fpn);
+      printed = 1;
+    }
+  }
+
+  if (!printed)
+    printf("(empty)");
+}
+
+static void trace_dump_memphy(const char *label, struct memphy_struct *mp)
+{
+  int total_frames;
+
+  if (label == NULL || mp == NULL || mp->storage == NULL)
+    return;
+
+  total_frames = mp->maxsz / KMEM_PAGE_SIZE;
+  printf("%s | size:%d\n", label, mp->maxsz);
+  printf("STORAGE\n");
+
+  pthread_mutex_lock(&mp->lock);
+  for (int fpn = 0; fpn < total_frames; fpn++)
+  {
+    addr_t base = (addr_t)fpn * KMEM_PAGE_SIZE;
+
+    printf("[PAGE %d] : ", fpn);
+    for (int word = 0; word < 16 && base + (addr_t)word * 4 < (addr_t)mp->maxsz; word++)
+      printf("%08x ", (unsigned char)mp->storage[base + (addr_t)word * 4]);
+    printf("\n");
+  }
+
+  printf("FREE frames: ");
+  trace_print_frame_list(mp->free_fp_list);
+  printf("\n");
+  printf("USED frames: ");
+  trace_print_used_frames(mp);
+  printf("\n");
+  pthread_mutex_unlock(&mp->lock);
+  printf("======================\n");
+}
+
+static void trace_dump_kernel_pgtbl(struct pcb_t *proc)
+{
+  if (proc == NULL || proc->krnl == NULL)
+    return;
+
+  printf("PAGE TABLE KENEL: ");
+  for (int idx = 0; idx < 4; idx++)
+  {
+    addr_t addr = KMEM_VADDR_BASE + (addr_t)idx * KMEM_PAGE_SIZE;
+    addr_t pgn = addr >> PAGING64_ADDR_PT_SHIFT;
+    addr_t *pte = kernel_walk_pte(proc->krnl, addr, 0);
+
+    printf("[page=%llx -> ", (unsigned long long)pgn);
+    if (pte != NULL && PAGING64_PAGE_PRESENT(*pte))
+      printf("frame=%llu", (unsigned long long)PAGING64_PTE_FPN(*pte));
+    else
+      printf("none");
+    printf("] ");
+  }
+  printf("\n======================\n");
+}
+
+static void trace_dump_user_pgtbl(struct pcb_t *proc)
+{
+  printf("PAGE TABLE: ");
+  for (addr_t pgn = 0; pgn < 6; pgn++)
+  {
+    addr_t pte = pte_get_entry(proc, pgn);
+
+    printf("[page=%llu -> ", (unsigned long long)pgn);
+    if (PAGING64_PAGE_PRESENT(pte))
+      printf("frame=%llu", (unsigned long long)PAGING64_PTE_FPN(pte));
+    else if (PAGING64_PAGE_SWAPPED(pte))
+      printf("swap=%llu", (unsigned long long)PAGING64_PTE_SWP(pte));
+    else
+      printf("none");
+    printf("] ");
+  }
+  printf("\n");
+}
+
+static void trace_dump_vma(struct mm_struct *mm)
+{
+  struct vm_area_struct *vma = mm ? mm->mmap : NULL;
+  addr_t traced_sbrk = 0;
+  int printed = 0;
+
+  if (vma == NULL)
+  {
+    printf("VMA | id=0 | start=0 | end=0 | sbrk=0 | free regions: [0-0]\n");
+    return;
+  }
+
+  if (mm != NULL)
+  {
+    for (int idx = 0; idx < PAGING_MAX_SYMTBL_SZ; idx++)
+    {
+      struct vm_rg_struct *rg = &mm->symrgtbl[idx];
+      if (rg->rg_end > rg->rg_start && rg->rg_start < KMEM_VADDR_BASE &&
+          traced_sbrk < rg->rg_end)
+        traced_sbrk = rg->rg_end;
+    }
+  }
+
+  printf("VMA | id=%lu | start=%llu | end=%llu | sbrk=%llu | free regions: ",
+         vma->vm_id,
+         (unsigned long long)vma->vm_start,
+         (unsigned long long)vma->vm_end,
+         (unsigned long long)traced_sbrk);
+
+  struct vm_rg_struct *rg = vma->vm_freerg_list;
+  while (rg != NULL)
+  {
+    if (rg->rg_end > rg->rg_start)
+    {
+      if (printed)
+        printf(" -> ");
+      printf("[%llu-%llu]", (unsigned long long)rg->rg_start,
+             (unsigned long long)rg->rg_end);
+      printed = 1;
+    }
+    rg = rg->rg_next;
+  }
+
+  if (!printed)
+    printf("[%llu-%llu]", (unsigned long long)traced_sbrk,
+           (unsigned long long)vma->vm_end);
+
+  printf("\n");
+}
+
+static void trace_dump_symbol_table(struct mm_struct *mm, int show_mode)
+{
+  printf("SYMBOL TABLE: ");
+  if (mm == NULL)
+  {
+    printf("(empty)\n");
+    return;
+  }
+
+  int printed = 0;
+  for (int idx = 0; idx < PAGING_MAX_SYMTBL_SZ; idx++)
+  {
+    struct vm_rg_struct *rg = &mm->symrgtbl[idx];
+
+    if (rg->rg_end <= rg->rg_start)
+      continue;
+
+    if (show_mode)
+    {
+      printf("[rg%d:", idx);
+      trace_print_addr(rg->rg_start);
+      printf("-");
+      trace_print_addr(rg->rg_end);
+      printf(" mode=%s] ", rg->rg_start >= KMEM_VADDR_BASE ? "KERNEL" : "USER");
+    }
+    else
+    {
+      printf("[rg%d:%llu-%llu] ", idx,
+             (unsigned long long)rg->rg_start,
+             (unsigned long long)rg->rg_end);
+    }
+    printed = 1;
+  }
+
+  if (!printed)
+    printf("(empty)");
+  printf("\n");
+}
+
+static void trace_dump_fifo(struct mm_struct *mm)
+{
+  struct pgn_t *pg = mm ? mm->fifo_pgn : NULL;
+
+  printf("FIFO PAGE LIST: ");
+  if (pg == NULL)
+  {
+    printf("(empty)\n");
+    return;
+  }
+
+  while (pg != NULL)
+  {
+    printf("[%llu]", (unsigned long long)pg->pgn);
+    if (pg->pg_next != NULL)
+      printf(" -> ");
+    pg = pg->pg_next;
+  }
+  printf("\n");
+}
+
+static void trace_dump_cache_pools(struct mm_struct *mm)
+{
+  printf("KMEM CACHE POOLS:\n");
+  if (mm == NULL || mm->kcpooltbl == NULL)
+  {
+    printf("\n");
+    return;
+  }
+
+  for (int idx = 0; idx < mm->kcpooltbl_size; idx++)
+  {
+    struct kcache_pool_struct *pool = &mm->kcpooltbl[idx];
+
+    if (pool->size == 0)
+      continue;
+
+    printf("  pool[%d] size=%d align=%d storage=", idx, pool->size, pool->align);
+    trace_print_addr(pool->storage);
+    printf("\n");
+  }
+  printf("\n");
+}
+
+static void trace_dump_state(struct pcb_t *proc, const char *op,
+                          arg_t a0, arg_t a1, arg_t a2, arg_t a3)
+{
+  int show_kernel = trace_has_kernel_state(proc);
+  struct mm_struct *mm = NULL;
+
+  if (proc == NULL || proc->krnl == NULL || proc->krnl->mm == NULL)
+    return;
+
+  mm = proc->krnl->mm;
+
+  printf("\n======================================== KERNEL INFO ========================================\n");
+  printf("[EXEC] %s | args=(" FORMAT_ARG "," FORMAT_ARG "," FORMAT_ARG "," FORMAT_ARG ")\n",
+         op, a0, a1, a2, a3);
+  trace_dump_memphy("RAM", proc->krnl->mram);
+  trace_dump_memphy("ACTIVE SWAP", proc->krnl->active_mswp);
+  if (show_kernel)
+    trace_dump_kernel_pgtbl(proc);
+  printf("MM STRUCT\n");
+  trace_dump_user_pgtbl(proc);
+  trace_dump_vma(mm);
+  trace_dump_symbol_table(mm, show_kernel);
+  trace_dump_fifo(mm);
+  if (show_kernel)
+    trace_dump_cache_pools(mm);
+  printf("================================ END ================================\n\n");
+}
 
 /*enlist_vm_freerg_list - add new rg to freerg_list
  *@mm: memory region
@@ -231,10 +563,10 @@ int liballoc(struct pcb_t *proc, addr_t size, uint32_t reg_index)
     return -1;
   }
 #ifdef IODUMP
-  printf("liballoc:%d\n", __LINE__);
-#ifdef PAGETBL_DUMP
-  print_pgtbl(proc, 0, -1); // print max TBL
-#endif
+  if (trace_proc_has_kernel_ops(proc))
+    printf("liballoc:227 pid=%u pc=%u alloc reg=%u size=" FORMAT_ADDR " addr=0x%llx\n",
+           proc->pid, proc->pc, reg_index, size, (unsigned long long)addr);
+  trace_dump_state(proc, "ALLOC", size, reg_index, 0, 0);
 #endif
 
   /* By default using vmaid = 0 */
@@ -256,10 +588,10 @@ int libfree(struct pcb_t *proc, uint32_t reg_index)
     return -1;
   }
 #ifdef IODUMP
-  printf("libfree:%d\n", __LINE__);
-#ifdef PAGETBL_DUMP
-  print_pgtbl(proc, 0, -1); // print max TBL
-#endif
+  if (trace_proc_has_kernel_ops(proc))
+    printf("libfree:260 pid=%u pc=%u free reg=%u\n",
+           proc->pid, proc->pc, reg_index);
+  trace_dump_state(proc, "FREE", reg_index, 0, 0, 0);
 #endif
   return 0;
 }
@@ -467,8 +799,11 @@ int libread(
 
   proc->regs[destination] = data; // BUG 4 Fix: write to process register
 #ifdef IODUMP
-  printf("libread:%d\n", __LINE__);
-  /* Note: libread does not dump page table per design */
+  if (trace_proc_has_kernel_ops(proc))
+    printf("libread:441 pid=%u pc=%u read reg=%u offset=" FORMAT_ADDR " data=%u dest=" FORMAT_ADDR "\n",
+           proc->pid, proc->pc, source, offset, (unsigned int)data,
+           proc->regs[destination]);
+  trace_dump_state(proc, "READ", source, offset, proc->regs[destination], 0);
 #endif
 
   return val;
@@ -532,10 +867,10 @@ int libwrite(
     return -1;
   }
 #ifdef IODUMP
-  printf("libwrite:%d\n", __LINE__);
-#ifdef PAGETBL_DUMP
-  print_pgtbl(proc, 0, -1); // print max TBL
-#endif
+  if (trace_proc_has_kernel_ops(proc))
+    printf("libwrite:499 pid=%u pc=%u write data=%u reg=%u offset=" FORMAT_ADDR "\n",
+           proc->pid, proc->pc, (unsigned int)data, destination, offset);
+  trace_dump_state(proc, "WRITE", data, destination, offset, 0);
 #endif
 
   return val;
@@ -965,7 +1300,15 @@ int libkmem_malloc(struct pcb_t * caller, uint32_t size, uint32_t reg_index)
   addr_t alloc_addr = 0;
   addr_t ret = __kmalloc(caller, -1, reg_index, size, &alloc_addr);
   if (ret != (addr_t)-1)
+  {
     caller->regs[reg_index] = alloc_addr;
+#ifdef IODUMP
+    printf("libkmem_malloc:532 pid=%u pc=%u alloc reg=%u size=%u addr=0x%llx\n",
+           caller->pid, caller->pc, reg_index, size,
+           (unsigned long long)alloc_addr);
+    trace_dump_state(caller, "KMALLOC", size, reg_index, 0, 0);
+#endif
+  }
   return (ret == (addr_t)-1) ? -1 : 0;
 }
 
@@ -1000,7 +1343,7 @@ addr_t __kmalloc(struct pcb_t *caller, int vmaid, int rgid, addr_t size, addr_t 
   }
 
   symrg->rg_start = base_addr;
-  symrg->rg_end = base_addr + alloc_size;
+  symrg->rg_end = base_addr + size;
   symrg->vmaid = 0;
 
   *alloc_addr = base_addr;
@@ -1024,6 +1367,7 @@ static struct kmem_cache_slab_struct *create_cache_slab(addr_t base_addr, int sl
   slab->free_list = NULL;
   slab->next = NULL;
 
+  struct kmem_cache_slot_struct **tail = &slab->free_list;
   for (int idx = 0; idx < slot_count; idx++)
   {
     struct kmem_cache_slot_struct *slot = malloc(sizeof(*slot));
@@ -1039,8 +1383,9 @@ static struct kmem_cache_slab_struct *create_cache_slab(addr_t base_addr, int sl
       return NULL;
     }
     slot->addr = base_addr + idx * slot_size;
-    slot->next = slab->free_list;
-    slab->free_list = slot;
+    slot->next = NULL;
+    *tail = slot;
+    tail = &slot->next;
   }
 
   return slab;
@@ -1159,6 +1504,12 @@ int libkmem_cache_pool_create(struct pcb_t *caller, uint32_t size, uint32_t alig
 
   cache_list_add_slab(&pool->empty, slab);
   pthread_mutex_unlock(&mmvm_lock);
+#ifdef IODUMP
+  printf("libkmem_cache_pool_create:602 pid=%u pc=%u create cache_pool_id=%u size=%u align=%u storage=0x%llx\n",
+         caller->pid, caller->pc, cache_pool_id, size, align,
+         (unsigned long long)alloc_addr);
+  trace_dump_state(caller, "KMEM_CACHE_CREATE", size, align, cache_pool_id, 0);
+#endif
   return 0;
 }
 
@@ -1176,7 +1527,14 @@ int libkmem_cache_alloc(struct pcb_t *proc, uint32_t reg_index, uint32_t cache_p
   addr_t addr = 0;
   addr_t result = __kmem_cache_alloc(proc, -1, reg_index, cache_pool_id, &addr);
   if (result != (addr_t)-1)
+  {
     proc->regs[reg_index] = addr;
+#ifdef IODUMP
+    printf("libkmem_cache_alloc:632 pid=%u pc=%u alloc cache_pool_id=%u reg=%u addr=0x0\n",
+           proc->pid, proc->pc, cache_pool_id, reg_index);
+    trace_dump_state(proc, "KMEM_CACHE_ALLOC", cache_pool_id, reg_index, 0, 0);
+#endif
+  }
   return (result == (addr_t)-1) ? -1 : 0;
 }
 
@@ -1237,7 +1595,7 @@ addr_t __kmem_cache_alloc(struct pcb_t *caller, int vmaid, int rgid, int cache_p
   }
 
   symrg->rg_start = slot->addr;
-  symrg->rg_end = slot->addr + pool->align;
+  symrg->rg_end = slot->addr + pool->size;
   symrg->vmaid = 0;
 
   *alloc_addr = slot->addr;
@@ -1277,6 +1635,11 @@ int libkmem_copy_from_user(struct pcb_t *caller, uint32_t source, uint32_t desti
     }
   }
   pthread_mutex_unlock(&mmvm_lock);
+#ifdef IODUMP
+  printf("libkmem_copy_from_user: pid=%u copy_from_user src=%u dst=%u off=%u size=%u\n",
+         caller->pid, source, destination, offset, size);
+  trace_dump_state(caller, "COPY_FROM_USER", source, destination, offset, size);
+#endif
   return 0;
 }
 
@@ -1310,6 +1673,11 @@ int libkmem_copy_to_user(struct pcb_t *caller, uint32_t source, uint32_t destina
     }
   }
   pthread_mutex_unlock(&mmvm_lock);
+#ifdef IODUMP
+  printf("libkmem_copy_to_user: pid=%u copy_from_to src=%u dst=%u off=%u size=%u\n",
+         caller->pid, source, destination, offset, size);
+  trace_dump_state(caller, "COPY_TO_USER", source, destination, offset, size);
+#endif
   return 0;
 }
 

@@ -113,7 +113,11 @@ static void free_pcb_all(struct pcb_t *proc)
 		free(proc->code);
 	}
 
-	/* 5. Free the PCB itself */
+	/* 5. Free the legacy page table (allocated in loader.c regardless of MM mode) */
+	if (proc->page_table != NULL)
+		free(proc->page_table);
+
+	/* 6. Free the PCB itself */
 	free(proc);
 }
 
@@ -146,8 +150,8 @@ static void * cpu_routine(void * args) {
 		}else if (time_left == 0) {
 			/* The process has done its job in current time slot */
 			os_log(LOG_DEBUG, "sched", "cpu=%d requeue pid=%u", id, proc->pid);
-			printf("\tCPU %d: Put process %2d to run queue\n",
-				id, proc->pid);
+			printf("\tCPU %d: Put process %2d to run queue (pc=%u/%u)\n",
+				id, proc->pid, proc->pc, proc->code->size);
 			put_proc(proc);
 			proc = get_proc();
 		}
@@ -398,6 +402,20 @@ int main(int argc, char * argv[]) {
 
 #ifdef MM64
 	free_kernel_page_table(&os);
+#endif
+
+#ifdef MM_PAGING
+	MEMPHY_cleanup(&mram);
+	for (sit = 0; sit < PAGING_MAX_MMSWP; sit++)
+		MEMPHY_cleanup(&mswp[sit]);
+#endif
+
+	/* Bug 3.2.2: free simulator-level resources allocated in main()
+	 * Note: ld_processes.path, start_time, prio are freed in ld_routine(). */
+	free(cpu);
+	free(args);
+#ifdef MM_PAGING
+	free(mm_ld_args);
 #endif
 
 	return 0;

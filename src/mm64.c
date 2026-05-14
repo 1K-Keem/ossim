@@ -753,8 +753,11 @@ int __swap_cp_page(struct memphy_struct *mpsrc, addr_t srcfpn,
     addrdst = dstfpn * PAGING64_PAGESZ + cellidx;
 
     BYTE data;
-    MEMPHY_read(mpsrc, addrsrc, &data);
-    MEMPHY_write(mpdst, addrdst, data);
+    /* Bug 3.3.3: propagate MEMPHY errors instead of silently continuing */
+    if (MEMPHY_read(mpsrc, addrsrc, &data) != 0)
+      return -1;
+    if (MEMPHY_write(mpdst, addrdst, data) != 0)
+      return -1;
   }
 
   return 0;
@@ -829,8 +832,35 @@ struct vm_rg_struct *init_vm_rg(addr_t rg_start, addr_t rg_end)
 
 int enlist_vm_rg_node(struct vm_rg_struct **rglist, struct vm_rg_struct *rgnode)
 {
-  rgnode->rg_next = *rglist;
-  *rglist = rgnode;
+  struct vm_rg_struct *curr = *rglist;
+  struct vm_rg_struct *prev = NULL;
+
+  if (rgnode->rg_start >= rgnode->rg_end)
+    return -1;
+
+  while (curr != NULL && curr->rg_start < rgnode->rg_start) {
+    prev = curr;
+    curr = curr->rg_next;
+  }
+
+  rgnode->rg_next = curr;
+  if (prev == NULL) {
+    *rglist = rgnode;
+  } else {
+    prev->rg_next = rgnode;
+  }
+
+  if (curr != NULL && rgnode->rg_end == curr->rg_start) {
+    rgnode->rg_end = curr->rg_end;
+    rgnode->rg_next = curr->rg_next;
+    free(curr);
+  }
+
+  if (prev != NULL && prev->rg_end == rgnode->rg_start) {
+    prev->rg_end = rgnode->rg_end;
+    prev->rg_next = rgnode->rg_next;
+    free(rgnode);
+  }
 
   return 0;
 }
@@ -976,12 +1006,15 @@ int print_pgtbl(struct pcb_t *caller, addr_t start, addr_t end)
     if (pte_ptr == NULL || *pte_ptr == 0)
       continue;
 
-    printf(" PGD=%016lx P4D=%016lx PUD=%016lx PMD=%016lx PTE=%016lx\n",
-           (unsigned long)root[pgd],
-           (unsigned long)p4d_ptr[p4d],
-           (unsigned long)pud_ptr[pud],
-           (unsigned long)pmd_ptr[pmd],
-           (unsigned long)*pte_ptr);
+    addr_t pte = *pte_ptr;
+    printf("vmap: VPN=%016lx", (unsigned long)pgn);
+    if (PAGING64_PAGE_PRESENT(pte)) {
+      printf(" -> PFN=%016lx (Present)\n", (unsigned long)PAGING64_PTE_FPN(pte));
+    } else if (PAGING64_PAGE_SWAPPED(pte)) {
+      printf(" -> SWAP=%016lx (Swapped)\n", (unsigned long)PAGING64_PTE_SWP(pte));
+    } else {
+      printf(" -> Invalid PTE\n");
+    }
   }
 
   return 0;

@@ -89,7 +89,7 @@ switch (ins.opcode)
 		stat = libkmem_cache_pool_create(proc, ins.arg_0, ins.arg_1, ins.arg_2);
 		break;
 	case KMEM_CACHE_ALLOC:
-		stat = libkmem_cache_alloc(proc, ins.arg_0, ins.arg_1);
+		stat = libkmem_cache_alloc(proc, ins.arg_1, ins.arg_0);
 		break;
 	case COPY_FROM_USER:
 		stat = libkmem_copy_from_user(proc, ins.arg_0, ins.arg_1, ins.arg_2, ins.arg_3);

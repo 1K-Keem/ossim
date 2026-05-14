@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "syscall.h"
+#include "libmem.h"
 
 int libsyscall (struct pcb_t *caller,
              uint32_t syscall_idx,
@@ -18,6 +19,8 @@ int libsyscall (struct pcb_t *caller,
              arg_t a3)
 {
    struct sc_regs regs;
+   arg_t dst_reg = a3;
+   int ret;
 
 	/*
 	 * @bksysnet: Please note that the architecture design of
@@ -29,9 +32,24 @@ int libsyscall (struct pcb_t *caller,
 	 *            This design follows centralized registry as in 
 	 *            ntkernel but it keeps remain in userspace only.
 	 */
+   if (caller == NULL || caller->krnl == NULL)
+      return -1;
+
    regs.a1 = a1;
    regs.a2 = a2;
    regs.a3 = a3;
+   regs.a4 = 0;
+   regs.a5 = 0;
+   regs.a6 = 0;
+   regs.orig_ax = 0;
+   regs.flags = 0;
 
-   return _syscall(caller->krnl, caller->pid, syscall_idx, &regs);
+   ret = _syscall(caller->krnl, caller->pid, syscall_idx, &regs);
+   if (ret == 0 && syscall_idx == 17 && a1 == SYSMEM_IO_READ) {
+      if (dst_reg >= 10)
+         return -1;
+      caller->regs[dst_reg] = regs.a3;
+   }
+
+   return ret;
 }
