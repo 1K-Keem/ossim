@@ -9,14 +9,15 @@ int empty(struct queue_t *q)
         return (q->size == 0);
 }
 
-void enqueue(struct queue_t *q, struct pcb_t *proc)
+int enqueue(struct queue_t *q, struct pcb_t *proc)
 {
         /* Append process to the back of the queue (FIFO). */
         if (q == NULL || q->size >= MAX_QUEUE_SIZE)
-                return;
+                return -1;
 
         q->proc[q->size] = proc;
         q->size++;
+        return 0;
 }
 
 struct pcb_t *dequeue(struct queue_t *q)

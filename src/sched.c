@@ -25,7 +25,25 @@ static pthread_mutex_t queue_lock;
  */
 static struct queue_t mlq_ready_queue[MAX_PRIO];
 static int slot[MAX_PRIO];
+
+static int valid_mlq_prio(uint32_t prio)
+{
+	return prio < MAX_PRIO;
+}
 #endif
+
+static void scheduler_enqueue_failed(const char *queue_name, struct pcb_t *proc)
+{
+	if (proc != NULL)
+		fprintf(stderr,
+			"Scheduler error: cannot enqueue pid=%u into %s; queue is full or invalid\n",
+			proc->pid, queue_name);
+	else
+		fprintf(stderr,
+			"Scheduler error: cannot enqueue NULL process into %s\n",
+			queue_name);
+	exit(EXIT_FAILURE);
+}
 
 /*
  * queue_empty - check whether all ready queues are empty.
@@ -159,8 +177,16 @@ struct pcb_t *get_mlq_proc(void)
 
 void put_mlq_proc(struct pcb_t *proc)
 {
-	if (proc == NULL || proc->prio >= MAX_PRIO)
+	if (proc == NULL)
 		return;
+
+	if (!valid_mlq_prio(proc->prio))
+	{
+		fprintf(stderr,
+			"Scheduler error: pid=%u has invalid MLQ priority %u; valid range is 0..%d\n",
+			proc->pid, proc->prio, MAX_PRIO - 1);
+		exit(EXIT_FAILURE);
+	}
 
 	/* Return a preempted/timeslice-expired process to its priority queue. */
 	proc->krnl->ready_queue = &ready_queue;
@@ -168,14 +194,26 @@ void put_mlq_proc(struct pcb_t *proc)
 	proc->krnl->running_list = &running_list;
 
 	pthread_mutex_lock(&queue_lock);
-	enqueue(&mlq_ready_queue[proc->prio], proc);
+	if (enqueue(&mlq_ready_queue[proc->prio], proc) != 0)
+	{
+		pthread_mutex_unlock(&queue_lock);
+		scheduler_enqueue_failed("MLQ ready queue", proc);
+	}
 	pthread_mutex_unlock(&queue_lock);
 }
 
 void add_mlq_proc(struct pcb_t *proc)
 {
-	if (proc == NULL || proc->prio >= MAX_PRIO)
+	if (proc == NULL)
 		return;
+
+	if (!valid_mlq_prio(proc->prio))
+	{
+		fprintf(stderr,
+			"Scheduler error: pid=%u has invalid MLQ priority %u; valid range is 0..%d\n",
+			proc->pid, proc->prio, MAX_PRIO - 1);
+		exit(EXIT_FAILURE);
+	}
 
 	/* Enqueue a newly loaded process into its priority queue. */
 	proc->krnl->ready_queue = &ready_queue;
@@ -183,9 +221,18 @@ void add_mlq_proc(struct pcb_t *proc)
 	proc->krnl->running_list = &running_list;
 
 	pthread_mutex_lock(&queue_lock);
-	enqueue(&mlq_ready_queue[proc->prio], proc);
+	if (enqueue(&mlq_ready_queue[proc->prio], proc) != 0)
+	{
+		pthread_mutex_unlock(&queue_lock);
+		scheduler_enqueue_failed("MLQ ready queue", proc);
+	}
 	/* Also track in running_list so find_proc() can locate this process */
-	enqueue(&running_list, proc);
+	if (enqueue(&running_list, proc) != 0)
+	{
+		purgequeue(&mlq_ready_queue[proc->prio], proc);
+		pthread_mutex_unlock(&queue_lock);
+		scheduler_enqueue_failed("running list", proc);
+	}
 	pthread_mutex_unlock(&queue_lock);
 }
 
@@ -253,23 +300,37 @@ struct pcb_t *get_proc(void)
 
 void put_proc(struct pcb_t *proc)
 {
+	if (proc == NULL)
+		return;
+
 	/* Return a timeslice-expired process to the back of the ready queue. */
 	proc->krnl->ready_queue = &ready_queue;
 	proc->krnl->running_list = &running_list;
 
 	pthread_mutex_lock(&queue_lock);
-	enqueue(&ready_queue, proc);
+	if (enqueue(&ready_queue, proc) != 0)
+	{
+		pthread_mutex_unlock(&queue_lock);
+		scheduler_enqueue_failed("ready queue", proc);
+	}
 	pthread_mutex_unlock(&queue_lock);
 }
 
 void add_proc(struct pcb_t *proc)
 {
+	if (proc == NULL)
+		return;
+
 	/* Add a newly loaded process to the back of the ready queue. */
 	proc->krnl->ready_queue = &ready_queue;
 	proc->krnl->running_list = &running_list;
 
 	pthread_mutex_lock(&queue_lock);
-	enqueue(&ready_queue, proc);
+	if (enqueue(&ready_queue, proc) != 0)
+	{
+		pthread_mutex_unlock(&queue_lock);
+		scheduler_enqueue_failed("ready queue", proc);
+	}
 	pthread_mutex_unlock(&queue_lock);
 }
 
