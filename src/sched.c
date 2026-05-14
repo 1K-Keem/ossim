@@ -142,6 +142,9 @@ struct pcb_t *get_mlq_proc(void)
 
 void put_mlq_proc(struct pcb_t *proc)
 {
+	if (proc == NULL || proc->prio >= MAX_PRIO)
+		return;
+
 	/* Return a preempted/timeslice-expired process to its priority queue. */
 	proc->krnl->ready_queue = &ready_queue;
 	proc->krnl->mlq_ready_queue = mlq_ready_queue;
@@ -154,6 +157,9 @@ void put_mlq_proc(struct pcb_t *proc)
 
 void add_mlq_proc(struct pcb_t *proc)
 {
+	if (proc == NULL || proc->prio >= MAX_PRIO)
+		return;
+
 	/* Enqueue a newly loaded process into its priority queue. */
 	proc->krnl->ready_queue = &ready_queue;
 	proc->krnl->mlq_ready_queue = mlq_ready_queue;
@@ -179,9 +185,11 @@ struct pcb_t *find_proc(uint32_t pid)
 {
 	pthread_mutex_lock(&queue_lock);
 	int i;
-	for (i = 0; i < running_list.size; i++) {
+	for (i = 0; i < running_list.size; i++)
+	{
 		if (running_list.proc[i] != NULL &&
-		    running_list.proc[i]->pid == pid) {
+			running_list.proc[i]->pid == pid)
+		{
 			struct pcb_t *p = running_list.proc[i];
 			pthread_mutex_unlock(&queue_lock);
 			return p;
@@ -198,8 +206,10 @@ void finish_proc(struct pcb_t *proc)
 {
 	pthread_mutex_lock(&queue_lock);
 	int i;
-	for (i = 0; i < running_list.size; i++) {
-		if (running_list.proc[i] == proc) {
+	for (i = 0; i < running_list.size; i++)
+	{
+		if (running_list.proc[i] == proc)
+		{
 			int j;
 			for (j = i; j < running_list.size - 1; j++)
 				running_list.proc[j] = running_list.proc[j + 1];
@@ -257,17 +267,21 @@ struct pcb_t *find_proc(uint32_t pid)
 {
 	pthread_mutex_lock(&queue_lock);
 	int i;
-	for (i = 0; i < running_list.size; i++) {
+	for (i = 0; i < running_list.size; i++)
+	{
 		if (running_list.proc[i] != NULL &&
-		    running_list.proc[i]->pid == pid) {
+			running_list.proc[i]->pid == pid)
+		{
 			struct pcb_t *p = running_list.proc[i];
 			pthread_mutex_unlock(&queue_lock);
 			return p;
 		}
 	}
-	for (i = 0; i < ready_queue.size; i++) {
+	for (i = 0; i < ready_queue.size; i++)
+	{
 		if (ready_queue.proc[i] != NULL &&
-		    ready_queue.proc[i]->pid == pid) {
+			ready_queue.proc[i]->pid == pid)
+		{
 			struct pcb_t *p = ready_queue.proc[i];
 			pthread_mutex_unlock(&queue_lock);
 			return p;
@@ -281,8 +295,10 @@ void finish_proc(struct pcb_t *proc)
 {
 	pthread_mutex_lock(&queue_lock);
 	int i;
-	for (i = 0; i < running_list.size; i++) {
-		if (running_list.proc[i] == proc) {
+	for (i = 0; i < running_list.size; i++)
+	{
+		if (running_list.proc[i] == proc)
+		{
 			int j;
 			for (j = i; j < running_list.size - 1; j++)
 				running_list.proc[j] = running_list.proc[j + 1];
