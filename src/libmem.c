@@ -299,8 +299,8 @@ int pg_getpage(struct mm_struct *mm, addr_t pgn, addr_t *fpn, struct pcb_t *call
     /* Step 4: Mark requested page as present in RAM at tgtfpn */
     pte_set_fpn(caller, pgn, tgtfpn);
 
-    /* Track the newly loaded page in the FIFO replacement list */
-    enlist_pgn_node(&caller->krnl->mm->fifo_pgn, pgn);
+    /* Enlist back to FIFO queue to track for future eviction and cleanup */
+    enlist_pgn_node(&mm->fifo_pgn, pgn);
   }
 
   *fpn = PAGING_FPN(pte_get_entry(caller, pgn));
@@ -1326,49 +1326,77 @@ int __write_user_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, B
  *@vmaid: ID vm area to alloc memory region
  *@incpgnum: number of page
  */
+#ifdef MM64
+/*
+ * pcb_memph_collect_recursive - Traverse page tables to free RAM frames and Swap slots.
+ */
+static void pcb_memph_collect_recursive(struct pcb_t *caller, addr_t *table, int level)
+{
+  if (table == NULL)
+    return;
+
+  for (int i = 0; i < PAGING64_MAX_PGN; i++)
+  {
+    addr_t pte = table[i];
+    if (pte == 0)
+      continue;
+
+    if (level < 4) // PGD, P4D, PUD, PMD
+    {
+      pcb_memph_collect_recursive(caller, (addr_t *)pte, level + 1);
+    }
+    else // Leaf PT entry
+    {
+      if (PAGING_PAGE_PRESENT(pte) && ((pte & PAGING_PTE_SWAPPED_MASK) == 0))
+      {
+        addr_t fpn = PAGING_FPN(pte);
+        MEMPHY_put_freefp(caller->krnl->mram, fpn);
+      }
+      else if ((pte & PAGING_PTE_SWAPPED_MASK) != 0)
+      {
+        addr_t swpfpn = PAGING_SWP(pte);
+        MEMPHY_put_freefp(caller->krnl->active_mswp, swpfpn);
+      }
+    }
+  }
+}
+#endif
+
 int free_pcb_memph(struct pcb_t *caller)
 {
   pthread_mutex_lock(&mmvm_lock);
-  addr_t fpn;
-  uint32_t pte;
 
 #ifdef MM64
+  /* 1. Traverse hierarchical page tables to free all physical resources (RAM & Swap) */
+  if (caller->krnl->mm->pgd != NULL)
+    pcb_memph_collect_recursive(caller, caller->krnl->mm->pgd, 0);
+
+  /* 2. Free the FIFO management nodes */
   struct pgn_t *pg = caller->krnl->mm->fifo_pgn;
   while (pg != NULL)
   {
-    pte = pte_get_entry(caller, pg->pgn);
-
-    if (pte == 0)
-    {
-      pg = pg->pg_next;
-      continue;
-    }
-
-    if (PAGING_PAGE_PRESENT(pte) && ((pte & PAGING_PTE_SWAPPED_MASK) == 0))
-    {
-      fpn = PAGING_FPN(pte);
-      MEMPHY_put_freefp(caller->krnl->mram, fpn);
-    }
-    else if ((pte & PAGING_PTE_SWAPPED_MASK) != 0)
-    {
-      fpn = PAGING_SWP(pte);
-      MEMPHY_put_freefp(caller->krnl->active_mswp, fpn);
-    }
-
-    pg = pg->pg_next;
+    struct pgn_t *next = pg->pg_next;
+    free(pg);
+    pg = next;
   }
+  caller->krnl->mm->fifo_pgn = NULL;
 #else
   int pagenum;
+  uint32_t pte;
+  addr_t fpn;
   for (pagenum = 0; pagenum < PAGING_MAX_PGN; pagenum++)
   {
     pte = caller->krnl->mm->pgd[pagenum];
+
+    if (pte == 0)
+      continue;
 
     if (PAGING_PAGE_PRESENT(pte))
     {
       fpn = PAGING_FPN(pte);
       MEMPHY_put_freefp(caller->krnl->mram, fpn);
     }
-    else
+    else if ((pte & PAGING_PTE_SWAPPED_MASK) != 0)
     {
       fpn = PAGING_SWP(pte);
       MEMPHY_put_freefp(caller->krnl->active_mswp, fpn);

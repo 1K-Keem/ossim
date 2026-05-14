@@ -68,6 +68,42 @@ static void set_done(void)
 	pthread_mutex_unlock(&done_lock);
 }
 
+static void free_pcb_all(struct pcb_t *proc)
+{
+	if (proc == NULL)
+		return;
+
+#ifdef MM_PAGING
+	if (proc->krnl != NULL)
+	{
+		/* 1. Free all physical memory (RAM/Swap) occupied by the process */
+		extern int free_pcb_memph(struct pcb_t * caller);
+		free_pcb_memph(proc);
+
+		if (proc->krnl->mm != NULL)
+		{
+			/* 2. Free all virtual memory metadata (VMAs, Regions) and page tables */
+			extern void free_mm(struct mm_struct * mm);
+			free_mm(proc->krnl->mm);
+		}
+		
+		/* 3. Free the kernel context structure */
+		free(proc->krnl);
+	}
+#endif
+
+	/* 4. Free the code segments */
+	if (proc->code != NULL)
+	{
+		if (proc->code->text != NULL)
+			free(proc->code->text);
+		free(proc->code);
+	}
+
+	/* 5. Free the PCB itself */
+	free(proc);
+}
+
 
 static void * cpu_routine(void * args) {
 	struct timer_id_t * timer_id = ((struct cpu_args*)args)->timer_id;
@@ -91,7 +127,7 @@ static void * cpu_routine(void * args) {
 			printf("\tCPU %d: Processed %2d has finished\n",
 				id ,proc->pid);
 			finish_proc(proc);
-			free(proc);
+			free_pcb_all(proc);
 			proc = get_proc();
 			time_left = 0;
 		}else if (time_left == 0) {

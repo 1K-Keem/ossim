@@ -813,4 +813,51 @@ int print_pgtbl(struct pcb_t *caller, addr_t start, addr_t end)
   return 0;
 }
 
+/*
+ * free_mm_tables_recursive - Traverse and free all tables in the 5-level tree.
+ */
+static void free_mm_tables_recursive(addr_t *table, int level)
+{
+  if (table == NULL)
+    return;
+
+  if (level < 4) // PGD, P4D, PUD, PMD have pointers to next levels
+  {
+    for (int i = 0; i < PAGING64_MAX_PGN; i++)
+    {
+      if (table[i] != 0)
+      {
+        free_mm_tables_recursive((addr_t *)table[i], level + 1);
+      }
+    }
+  }
+  free(table);
+}
+
+/*
+ * free_mm - Comprehensive cleanup of the mm_struct and its children.
+ */
+void free_mm(struct mm_struct *mm)
+{
+  if (mm == NULL)
+    return;
+
+  /* 1. Free all page table levels */
+  free_mm_tables_recursive(mm->pgd, 0);
+
+  /* 2. Free VMAs and their associated region lists */
+  extern void free_vma_list(struct vm_area_struct * vma);
+  free_vma_list(mm->mmap);
+
+  /* 3. Free the symrgtbl region nodes */
+  extern void free_rg_list(struct vm_rg_struct * rg);
+  for (int i = 0; i < PAGING_MAX_SYMTBL_SZ; i++)
+  {
+    free_rg_list(mm->symrgtbl[i].rg_next);
+  }
+
+  /* 4. Free the mm_struct itself */
+  free(mm);
+}
+
 #endif  //def MM64

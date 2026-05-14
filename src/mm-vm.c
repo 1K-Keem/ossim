@@ -53,34 +53,25 @@ int __mm_swap_page(struct pcb_t *caller, addr_t vicfpn , addr_t swpfpn)
     return 0;
 }
 
-/*get_vm_area_node - get vm area for a number of pages
- *@caller: caller
- *@vmaid: ID vm area to alloc memory region
- *@incpgnum: number of page
- *@vmastart: vma end
- *@vmaend: vma end
- *
- */
-struct vm_rg_struct *get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, addr_t size, addr_t alignedsz)
+void free_rg_list(struct vm_rg_struct *rg)
 {
-  struct vm_rg_struct * newrg;
-  /* TODO retrive current vma to obtain newrg, current comment out due to compiler redundant warning*/
-  //struct vm_area_struct *cur_vma = get_vma_by_num(caller->kernl->mm, vmaid);
+  while (rg != NULL)
+  {
+    struct vm_rg_struct *next = rg->rg_next;
+    free(rg);
+    rg = next;
+  }
+}
 
-  //newrg = malloc(sizeof(struct vm_rg_struct));
-
-  /* TODO: update the newrg boundary
-  // newrg->rg_start = ...
-  // newrg->rg_end = ...
-  */
-  struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
-
-  newrg = malloc(sizeof(struct vm_rg_struct));
-  newrg->rg_start = cur_vma->sbrk;
-  newrg->rg_end = newrg->rg_start + size;
-  /* END TODO */
-
-  return newrg;
+void free_vma_list(struct vm_area_struct *vma)
+{
+  while (vma != NULL)
+  {
+    struct vm_area_struct *next = vma->vm_next;
+    free_rg_list(vma->vm_freerg_list);
+    free(vma);
+    vma = next;
+  }
 }
 
 /*validate_overlap_vm_area
