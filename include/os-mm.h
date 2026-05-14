@@ -104,6 +104,7 @@ struct kcache_pool_struct {
    int align;  // Alignment size for each slot
    int slot_count;  // Total number of slots across all slabs
    addr_t storage;  // Base virtual address of the allocated memory
+   addr_t alloc_size;  // Page-aligned backing storage size
    struct kmem_cache_slab_struct *empty;  // Slabs with all slots free
    struct kmem_cache_slab_struct *partial;  // Slabs with some slots allocated
    struct kmem_cache_slab_struct *full;  // Slabs with all slots allocated

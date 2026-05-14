@@ -368,6 +368,10 @@ int main(int argc, char * argv[]) {
 	/* Stop timer */
 	stop_timer();
 
+#ifdef MM64
+	free_kernel_page_table(&os);
+#endif
+
 	return 0;
 
 }
