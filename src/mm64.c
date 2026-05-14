@@ -15,6 +15,9 @@
 
 #include "mm64.h"
 #include "queue.h"
+#define OSSIM_PROJECT_SCHED_H
+#include "sched.h"
+#undef OSSIM_PROJECT_SCHED_H
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -601,6 +604,7 @@ int swap_out_victim_page(struct pcb_t *caller, addr_t *retfpn)
   addr_t vicpgn = 0;
   addr_t swpfpn = 0;
   addr_t vicpte = 0;
+  int sched_locked = 0;
 
   if (caller == NULL || caller->krnl == NULL || caller->krnl->mm == NULL ||
       caller->krnl->mram == NULL || caller->krnl->active_mswp == NULL ||
@@ -610,22 +614,34 @@ int swap_out_victim_page(struct pcb_t *caller, addr_t *retfpn)
   if (MEMPHY_get_freefp(caller->krnl->active_mswp, &swpfpn) != 0)
     return -1;
 
+  scheduler_lock();
+  sched_locked = 1;
+
   victim_proc = find_global_victim(caller, &vicpgn, &vicpte);
   if (victim_proc == NULL) {
+    scheduler_unlock();
+    sched_locked = 0;
     MEMPHY_put_freefp(caller->krnl->active_mswp, swpfpn);
     return -1;
   }
 
   *retfpn = PAGING64_PTE_FPN(vicpte);
   if (__swap_cp_page(caller->krnl->mram, *retfpn, caller->krnl->active_mswp, swpfpn) != 0) {
+    scheduler_unlock();
+    sched_locked = 0;
     MEMPHY_put_freefp(caller->krnl->active_mswp, swpfpn);
     return -1;
   }
 
   if (pte_set_swap(victim_proc, vicpgn, caller->krnl->active_mswp_id, swpfpn) != 0) {
+    scheduler_unlock();
+    sched_locked = 0;
     MEMPHY_put_freefp(caller->krnl->active_mswp, swpfpn);
     return -1;
   }
+
+  if (sched_locked)
+    scheduler_unlock();
 
   return 0;
 }

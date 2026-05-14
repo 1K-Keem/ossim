@@ -33,15 +33,22 @@ static int slot[MAX_PRIO];
  */
 int queue_empty(void)
 {
+	int ret;
+
+	pthread_mutex_lock(&queue_lock);
 #ifdef MLQ_SCHED
 	int prio;
 	for (prio = 0; prio < MAX_PRIO; prio++)
-		if (!empty(&mlq_ready_queue[prio]))
+		if (!empty(&mlq_ready_queue[prio])) {
+			pthread_mutex_unlock(&queue_lock);
 			return 0;
-	return 1;
+		}
+	ret = 1;
 #else
-	return (empty(&ready_queue) && empty(&run_queue));
+	ret = (empty(&ready_queue) && empty(&run_queue));
 #endif
+	pthread_mutex_unlock(&queue_lock);
+	return ret;
 }
 
 void init_scheduler(void)
@@ -66,6 +73,16 @@ void init_scheduler(void)
 void finish_scheduler(void)
 {
 	pthread_mutex_destroy(&queue_lock);
+}
+
+void scheduler_lock(void)
+{
+	pthread_mutex_lock(&queue_lock);
+}
+
+void scheduler_unlock(void)
+{
+	pthread_mutex_unlock(&queue_lock);
 }
 
 #ifdef MLQ_SCHED
