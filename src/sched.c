@@ -51,22 +51,22 @@ static void scheduler_enqueue_failed(const char *queue_name, struct pcb_t *proc)
  */
 int queue_empty(void)
 {
-	int is_empty = 1;
+	int ret;
 
 	pthread_mutex_lock(&queue_lock);
 #ifdef MLQ_SCHED
 	int prio;
 	for (prio = 0; prio < MAX_PRIO; prio++)
-		if (!empty(&mlq_ready_queue[prio]))
-		{
-			is_empty = 0;
-			break;
+		if (!empty(&mlq_ready_queue[prio])) {
+			pthread_mutex_unlock(&queue_lock);
+			return 0;
 		}
+	ret = 1;
 #else
-	is_empty = (empty(&ready_queue) && empty(&run_queue));
+	ret = (empty(&ready_queue) && empty(&run_queue));
 #endif
 	pthread_mutex_unlock(&queue_lock);
-	return is_empty;
+	return ret;
 }
 
 void init_scheduler(void)
@@ -91,6 +91,16 @@ void init_scheduler(void)
 void finish_scheduler(void)
 {
 	pthread_mutex_destroy(&queue_lock);
+}
+
+void scheduler_lock(void)
+{
+	pthread_mutex_lock(&queue_lock);
+}
+
+void scheduler_unlock(void)
+{
+	pthread_mutex_unlock(&queue_lock);
 }
 
 #ifdef MLQ_SCHED

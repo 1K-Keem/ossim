@@ -19,6 +19,8 @@ int queue_empty(void);
 
 void init_scheduler(void);
 void finish_scheduler(void);
+void scheduler_lock(void);
+void scheduler_unlock(void);
 struct pcb_t * find_proc(uint32_t pid);
 void finish_proc(struct pcb_t * proc);
 

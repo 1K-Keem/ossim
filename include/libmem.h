@@ -19,7 +19,7 @@
 extern struct vm_area_struct *get_vma_by_num(struct mm_struct *mm, int vmaid);
 int liballoc(struct pcb_t *, addr_t, uint32_t);
 int libfree(struct pcb_t *, uint32_t);
-int libread(struct pcb_t*, uint32_t, addr_t, uint32_t*);
+int libread(struct pcb_t*, uint32_t, addr_t, uint32_t);
 int libwrite(struct pcb_t*, BYTE, uint32_t, addr_t);
 int libkmem_malloc(struct pcb_t*, uint32_t, uint32_t);
 int libkmem_cache_alloc(struct pcb_t *, uint32_t, uint32_t);
