@@ -14,6 +14,7 @@
  */
 
 #include "mm64.h"
+#include "queue.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -229,7 +230,7 @@ int init_pte(addr_t *pte,
     }
     else
     { // page swapped
-      SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
+      CLRBIT(*pte, PAGING_PTE_PRESENT_MASK);
       SETBIT(*pte, PAGING_PTE_SWAPPED_MASK);
       CLRBIT(*pte, PAGING_PTE_DIRTY_MASK);
 
@@ -310,7 +311,7 @@ int pte_set_swap(struct pcb_t *caller, addr_t pgn, int swptyp, addr_t swpoff)
 
   *pte = 0;
   addr_t pte_val = 0;
-  SETBIT(pte_val, PAGING_PTE_PRESENT_MASK);
+  CLRBIT(pte_val, PAGING_PTE_PRESENT_MASK);
   SETBIT(pte_val, PAGING_PTE_SWAPPED_MASK);
 
   SETVAL(pte_val, swptyp, PAGING_PTE_SWPTYP_MASK, PAGING_PTE_SWPTYP_LOBIT);
@@ -320,7 +321,7 @@ int pte_set_swap(struct pcb_t *caller, addr_t pgn, int swptyp, addr_t swpoff)
 #else
   struct krnl_t *krnl = caller->krnl;
   uint32_t pte_val = krnl->mm->pgd[pgn];
-  SETBIT(pte_val, PAGING_PTE_PRESENT_MASK);
+  CLRBIT(pte_val, PAGING_PTE_PRESENT_MASK);
   SETBIT(pte_val, PAGING_PTE_SWAPPED_MASK);
 
   SETVAL(pte_val, swptyp, PAGING_PTE_SWPTYP_MASK, PAGING_PTE_SWPTYP_LOBIT);
@@ -473,6 +474,116 @@ addr_t vmap_page_range(struct pcb_t *caller,           // process call
   return 0;
 }
 
+static void release_frame_list(struct pcb_t *caller, struct framephy_struct *head)
+{
+  struct framephy_struct *curr = head;
+
+  while (curr != NULL) {
+    struct framephy_struct *next = curr->fp_next;
+    MEMPHY_put_freefp(caller->krnl->mram, curr->fpn);
+    free(curr);
+    curr = next;
+  }
+}
+
+static struct framephy_struct *new_frame_node(addr_t fpn)
+{
+  struct framephy_struct *node = malloc(sizeof(struct framephy_struct));
+
+  if (node == NULL)
+    return NULL;
+
+  node->fpn = fpn;
+  node->fp_next = NULL;
+  node->owner = NULL;
+
+  return node;
+}
+
+static int find_present_victim_in_proc(struct pcb_t *proc, addr_t *retpgn, uint32_t *retpte)
+{
+  addr_t vicpgn = 0;
+  uint32_t vicpte = 0;
+
+  if (proc == NULL || proc->krnl == NULL || proc->krnl->mm == NULL ||
+      retpgn == NULL || retpte == NULL)
+    return -1;
+
+  while (find_victim_page(proc->krnl->mm, &vicpgn) == 0) {
+    vicpte = pte_get_entry(proc, vicpgn);
+    if (PAGING_PAGE_PRESENT(vicpte) && ((vicpte & PAGING_PTE_SWAPPED_MASK) == 0)) {
+      *retpgn = vicpgn;
+      *retpte = vicpte;
+      return 0;
+    }
+  }
+
+  return -1;
+}
+
+static struct pcb_t *find_global_victim(struct pcb_t *caller, addr_t *retpgn, uint32_t *retpte)
+{
+  struct queue_t *running_list = NULL;
+  int idx = 0;
+
+  if (find_present_victim_in_proc(caller, retpgn, retpte) == 0)
+    return caller;
+
+  if (caller == NULL || caller->krnl == NULL)
+    return NULL;
+
+  running_list = caller->krnl->running_list;
+  if (running_list == NULL)
+    return NULL;
+
+  for (idx = 0; idx < running_list->size; idx++) {
+    struct pcb_t *proc = running_list->proc[idx];
+
+    if (proc == NULL || proc == caller)
+      continue;
+
+    if (find_present_victim_in_proc(proc, retpgn, retpte) == 0)
+      return proc;
+  }
+
+  return NULL;
+}
+
+int swap_out_victim_page(struct pcb_t *caller, addr_t *retfpn)
+{
+  struct pcb_t *victim_proc = NULL;
+  addr_t vicpgn = 0;
+  addr_t swpfpn = 0;
+  uint32_t vicpte = 0;
+
+  if (caller == NULL || caller->krnl == NULL || caller->krnl->mm == NULL ||
+      caller->krnl->mram == NULL || caller->krnl->active_mswp == NULL ||
+      retfpn == NULL)
+    return -1;
+
+  if (MEMPHY_get_freefp(caller->krnl->active_mswp, &swpfpn) != 0)
+    return -1;
+
+  victim_proc = find_global_victim(caller, &vicpgn, &vicpte);
+  if (victim_proc == NULL) {
+    MEMPHY_put_freefp(caller->krnl->active_mswp, swpfpn);
+    return -1;
+  }
+
+  *retfpn = PAGING_FPN(vicpte);
+  if (__swap_cp_page(caller->krnl->mram, *retfpn, caller->krnl->active_mswp, swpfpn) != 0) {
+    MEMPHY_put_freefp(caller->krnl->active_mswp, swpfpn);
+    return -1;
+  }
+
+  if (pte_set_swap(victim_proc, vicpgn, caller->krnl->active_mswp_id, swpfpn) != 0) {
+    MEMPHY_put_freefp(caller->krnl->active_mswp, swpfpn);
+    return -1;
+  }
+
+  return 0;
+}
+
 /*
  * alloc_pages_range - allocate req_pgnum of frame in ram
  * @caller    : caller
@@ -488,39 +599,36 @@ addr_t alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_st
   struct framephy_struct *head = NULL;
   struct framephy_struct *tail = NULL;
 
+  if (caller == NULL || caller->krnl == NULL || caller->krnl->mram == NULL ||
+      req_pgnum < 0 || frm_lst == NULL)
+    return -1;
+
   for (pgit = 0; pgit < req_pgnum; pgit++)
   {
-    if (MEMPHY_get_freefp(caller->krnl->mram, &fpn) == 0)
+    if (MEMPHY_get_freefp(caller->krnl->mram, &fpn) != 0 &&
+        swap_out_victim_page(caller, &fpn) != 0)
     {
-      newfp_str = malloc(sizeof(struct framephy_struct));
-      newfp_str->fpn = fpn;
-      newfp_str->fp_next = NULL;
-
-      if (head == NULL) {
-        head = newfp_str;
-        tail = newfp_str;
-      } else {
-        tail->fp_next = newfp_str;
-        tail = newfp_str;
-      }
-    }
-    else
-    { 
-      /* ERROR CODE of obtaining sum but not enough frames */
-      struct framephy_struct *curr = head;
-      while (curr != NULL) {
-        MEMPHY_put_freefp(caller->krnl->mram, curr->fpn);
-        struct framephy_struct *next = curr->fp_next;
-        free(curr);
-        curr = next;
-      }
+      release_frame_list(caller, head);
       return -3000;
     }
+
+    newfp_str = new_frame_node(fpn);
+    if (newfp_str == NULL) {
+      MEMPHY_put_freefp(caller->krnl->mram, fpn);
+      release_frame_list(caller, head);
+      return -1;
+    }
+
+    if (head == NULL) {
+      head = newfp_str;
+      tail = newfp_str;
+    } else {
+      tail->fp_next = newfp_str;
+      tail = newfp_str;
+    }
   }
 
-  if (frm_lst != NULL) {
-    *frm_lst = head;
-  }
+  *frm_lst = head;
 
   return 0;
 }
