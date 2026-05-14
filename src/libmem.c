@@ -99,6 +99,12 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, addr_t size, addr_t *allo
     return -1;
   }
 
+  if (rgid < 0 || rgid >= PAGING_MAX_SYMTBL_SZ)
+  {
+    pthread_mutex_unlock(&mmvm_lock);
+    return -1;
+  }
+
   /* Fast path: find a free region in the existing free list */
   if (get_free_vmrg_area(caller, vmaid, size, &rgnode) == 0)
   {
@@ -170,6 +176,7 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
 
   pthread_mutex_lock(&mmvm_lock);
 
+  if (rgid < 0 || rgid >= PAGING_MAX_SYMTBL_SZ)
   if (rgid < 0 || rgid >= PAGING_MAX_SYMTBL_SZ)
   {
     pthread_mutex_unlock(&mmvm_lock);
@@ -450,7 +457,7 @@ int libread(
     struct pcb_t *proc, // Process executing the instruction
     uint32_t source,    // Index of source register
     addr_t offset,    // Source address = [source] + [offset]
-    uint32_t* destination)
+    uint32_t destination) // BUG 4 Fix: Change to value instead of pointer
 {
   BYTE data;
   int val = __read(proc, 0, source, offset, &data);
@@ -458,7 +465,7 @@ int libread(
   if (val == -1)
     return -1;
 
-  *destination = data;
+  proc->regs[destination] = data; // BUG 4 Fix: write to process register
 #ifdef IODUMP
   printf("libread:%d\n", __LINE__);
   /* Note: libread does not dump page table per design */
