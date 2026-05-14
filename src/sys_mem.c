@@ -77,7 +77,7 @@ int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs* regs)
                             vma->vm_start, vma->sbrk);
                      return -1;
             }
-            if (pg_getval(caller->krnl->mm, (int)regs->a2, &value, caller) < 0) {
+            if (pg_getval(caller->krnl->mm, (addr_t)regs->a2, &value, caller) < 0) {
                      os_log(LOG_ERROR, "sys_mem",
                             "pid=%u SYSMEM_IO_READ: page translation failed"
                             " vaddr=" FORMAT_ADDR, pid, (addr_t)regs->a2);
@@ -107,7 +107,7 @@ int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs* regs)
                             vma->vm_start, vma->sbrk);
                      return -1;
             }
-            if (pg_setval(caller->krnl->mm, (int)regs->a2,
+            if (pg_setval(caller->krnl->mm, (addr_t)regs->a2,
                           (BYTE)(regs->a3 & 0xFF), caller) < 0) {
                      os_log(LOG_ERROR, "sys_mem",
                             "pid=%u SYSMEM_IO_WRITE: page translation failed"
