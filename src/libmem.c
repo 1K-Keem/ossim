@@ -254,49 +254,22 @@ int pg_getpage(struct mm_struct *mm, addr_t pgn, addr_t *fpn, struct pcb_t *call
 
   if (!PAGING_PAGE_PRESENT(pte))
   { /* Page is not online, bring it into RAM via swap */
-    addr_t vicpgn, swpfpn;
-    addr_t vicfpn;
+    if ((pte & PAGING_PTE_SWAPPED_MASK) == 0)
+      return -1;
+
     addr_t tgtfpn;
-
-    /* Find victim page using FIFO policy */
-    if (find_victim_page(caller->krnl->mm, &vicpgn) == -1)
-      return -1;
-
-    /* Get the physical frame number of the victim page */
-    uint32_t vicpte = pte_get_entry(caller, vicpgn);
-    vicfpn = PAGING_FPN(vicpte);
-
-    /* Get a free frame in MEMSWP to store the evicted victim */
-    if (MEMPHY_get_freefp(caller->krnl->active_mswp, &swpfpn) == -1)
-      return -1;
-
-    /* The target frame for the requested page reuses the victim's RAM frame */
-    tgtfpn = vicfpn;
 
     /* Remember the swap offset of the requested page (if it was previously swapped out) */
     addr_t req_swpoff = PAGING_SWP(pte);
-    int req_was_swapped = GETVAL(pte, PAGING_PTE_SWAPPED_MASK, 30);
 
-    /* Step 1: Evict victim page — copy victim frame from RAM to swap */
-    struct sc_regs regs;
-    regs.a1 = SYSMEM_SWP_OP;
-    regs.a2 = vicfpn;   /* source: victim frame in MEMRAM */
-    regs.a3 = swpfpn;   /* dest:   free slot in MEMSWP */
-    _syscall(caller->krnl, caller->pid, 17, &regs);
+    if (swap_out_victim_page(caller, &tgtfpn) != 0)
+      return -1;
 
-    /* Step 2: If requested page was previously swapped out, load it back from swap */
-    if (req_was_swapped)
-    {
-      __swap_cp_page(caller->krnl->active_mswp, req_swpoff,
-                     caller->krnl->mram, tgtfpn);
-      /* Return the swap slot of the requested page to the free pool */
-      MEMPHY_put_freefp(caller->krnl->active_mswp, req_swpoff);
-    }
+    if (__swap_cp_page(caller->krnl->active_mswp, req_swpoff,
+                       caller->krnl->mram, tgtfpn) != 0)
+      return -1;
 
-    /* Step 3: Mark victim page as swapped out in its PTE */
-    pte_set_swap(caller, vicpgn, 0, swpfpn);
-
-    /* Step 4: Mark requested page as present in RAM at tgtfpn */
+    MEMPHY_put_freefp(caller->krnl->active_mswp, req_swpoff);
     pte_set_fpn(caller, pgn, tgtfpn);
 
     /* Enlist back to FIFO queue to track for future eviction and cleanup */
@@ -878,7 +851,7 @@ static int kernel_region_valid(struct pcb_t *caller, int rgid, addr_t size, addr
     return -1;
 
   struct vm_rg_struct *rg = get_symrg_byid(caller->krnl->mm, rgid);
-  if (rg == NULL || rg->rg_start == 0 || rg->rg_end <= rg->rg_start)
+  if (rg == NULL || rg->rg_end <= rg->rg_start)
     return -1;
 
   addr_t region_size = rg->rg_end - rg->rg_start;
@@ -1293,7 +1266,7 @@ int __read_user_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BY
     return -1;
 
   struct vm_rg_struct *rg = get_symrg_byid(caller->krnl->mm, rgid);
-  if (rg == NULL || rg->rg_start == 0 || rg->rg_end <= rg->rg_start)
+  if (rg == NULL || rg->rg_end <= rg->rg_start)
     return -1;
 
   if (offset >= rg->rg_end - rg->rg_start)
@@ -1311,7 +1284,7 @@ int __write_user_mem(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, B
     return -1;
 
   struct vm_rg_struct *rg = get_symrg_byid(caller->krnl->mm, rgid);
-  if (rg == NULL || rg->rg_start == 0 || rg->rg_end <= rg->rg_start)
+  if (rg == NULL || rg->rg_end <= rg->rg_start)
     return -1;
 
   if (offset >= rg->rg_end - rg->rg_start)
