@@ -11,7 +11,9 @@
 #define MLQ_SCHED
 #endif
 
+#ifndef MAX_PRIO
 #define MAX_PRIO 140
+#endif
 
 int queue_empty(void);
 

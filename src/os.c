@@ -51,6 +51,19 @@ struct cpu_args {
 	int id;
 };
 
+#ifdef MLQ_SCHED
+static void validate_mlq_priority(unsigned long prio, const char *path, int index)
+{
+	if (prio < MAX_PRIO)
+		return;
+
+	fprintf(stderr,
+		"Invalid MLQ priority %lu for process entry %d in %s; valid range is 0..%d\n",
+		prio, index + 1, path, MAX_PRIO - 1);
+	exit(EXIT_FAILURE);
+}
+#endif
+
 static int is_done(void)
 {
 	int ret;
@@ -191,7 +204,8 @@ static void * ld_routine(void * args) {
 		proc->krnl = krnl;
 
 #ifdef MLQ_SCHED
-		proc->prio = ld_processes.prio[i];
+		validate_mlq_priority(ld_processes.prio[i], ld_processes.path[i], i);
+		proc->prio = (uint32_t)ld_processes.prio[i];
 #endif
 		while (current_time() < ld_processes.start_time[i]) {
 			next_slot(timer_id);
@@ -212,6 +226,9 @@ static void * ld_routine(void * args) {
 	}
 	free(ld_processes.path);
 	free(ld_processes.start_time);
+#ifdef MLQ_SCHED
+	free(ld_processes.prio);
+#endif
 	set_done();
 	detach_event(timer_id);
 	pthread_exit(NULL);
@@ -264,6 +281,7 @@ static void read_config(const char * path) {
 		strcat(ld_processes.path[i], "input/proc/");
 		char proc[100];
 #ifdef MLQ_SCHED
+		int scanned;
 		if (
 #ifdef MM_PAGING
 		    has_first_proc_line &&
@@ -271,11 +289,17 @@ static void read_config(const char * path) {
 		    0 &&
 #endif
 		    i == 0) {
-			sscanf(first_proc_line, "%lu %s %lu", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+			scanned = sscanf(first_proc_line, "%lu %99s %lu", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
 		} else {
-			fscanf(file, "%lu %s %lu\n", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
+			scanned = fscanf(file, "%lu %99s %lu\n", &ld_processes.start_time[i], proc, &ld_processes.prio[i]);
 		}
+		if (scanned != 3) {
+			fprintf(stderr, "Invalid process config line %d in %s\n", i + 1, path);
+			exit(EXIT_FAILURE);
+		}
+		validate_mlq_priority(ld_processes.prio[i], path, i);
 #else
+		int scanned;
 		if (
 #ifdef MM_PAGING
 		    has_first_proc_line &&
@@ -283,9 +307,13 @@ static void read_config(const char * path) {
 		    0 &&
 #endif
 		    i == 0) {
-			sscanf(first_proc_line, "%lu %s", &ld_processes.start_time[i], proc);
+			scanned = sscanf(first_proc_line, "%lu %99s", &ld_processes.start_time[i], proc);
 		} else {
-			fscanf(file, "%lu %s\n", &ld_processes.start_time[i], proc);
+			scanned = fscanf(file, "%lu %99s\n", &ld_processes.start_time[i], proc);
+		}
+		if (scanned != 2) {
+			fprintf(stderr, "Invalid process config line %d in %s\n", i + 1, path);
+			exit(EXIT_FAILURE);
 		}
 #endif
 		strcat(ld_processes.path[i], proc);
