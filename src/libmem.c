@@ -65,7 +65,7 @@ int enlist_vm_freerg_list(struct mm_struct *mm, struct vm_rg_struct *rg_elmt)
  */
 struct vm_rg_struct *get_symrg_byid(struct mm_struct *mm, int rgid)
 {
-  if (rgid < 0 || rgid > PAGING_MAX_SYMTBL_SZ)
+  if (rgid < 0 || rgid >= PAGING_MAX_SYMTBL_SZ)
     return NULL;
 
   return &mm->symrgtbl[rgid];
@@ -86,6 +86,12 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, addr_t size, addr_t *allo
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
 
   if (cur_vma == NULL) {
+    pthread_mutex_unlock(&mmvm_lock);
+    return -1;
+  }
+
+  if (rgid < 0 || rgid >= PAGING_MAX_SYMTBL_SZ)
+  {
     pthread_mutex_unlock(&mmvm_lock);
     return -1;
   }
@@ -158,7 +164,7 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
 {
   pthread_mutex_lock(&mmvm_lock);
 
-  if (rgid < 0 || rgid > PAGING_MAX_SYMTBL_SZ)
+  if (rgid < 0 || rgid >= PAGING_MAX_SYMTBL_SZ)
   {
     pthread_mutex_unlock(&mmvm_lock);
     return -1;
@@ -412,7 +418,10 @@ int __read(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE *data)
     return -1;
   }
 
-  pg_getval(caller->krnl->mm, currg->rg_start + offset, data, caller);
+  if (pg_getval(caller->krnl->mm, currg->rg_start + offset, data, caller) < 0) {
+    pthread_mutex_unlock(&mmvm_lock);
+    return -1;
+  }
 
   pthread_mutex_unlock(&mmvm_lock);
   return 0;
@@ -423,7 +432,7 @@ int libread(
     struct pcb_t *proc, // Process executing the instruction
     uint32_t source,    // Index of source register
     addr_t offset,    // Source address = [source] + [offset]
-    uint32_t* destination)
+    uint32_t destination) // BUG 4 Fix: Change to value instead of pointer
 {
   BYTE data;
   int val = __read(proc, 0, source, offset, &data);
@@ -431,7 +440,7 @@ int libread(
   if (val == -1)
     return -1;
 
-  *destination = data;
+  proc->regs[destination] = data; // BUG 4 Fix: write to process register
 #ifdef IODUMP
   printf("libread:%d\n", __LINE__);
   /* Note: libread does not dump page table per design */
@@ -467,7 +476,10 @@ int __write(struct pcb_t *caller, int vmaid, int rgid, addr_t offset, BYTE value
     return -1;
   }
 
-  pg_setval(caller->krnl->mm, currg->rg_start + offset, value, caller);
+  if (pg_setval(caller->krnl->mm, currg->rg_start + offset, value, caller) < 0) {
+    pthread_mutex_unlock(&mmvm_lock);
+    return -1;
+  }
 
   pthread_mutex_unlock(&mmvm_lock);
   return 0;
